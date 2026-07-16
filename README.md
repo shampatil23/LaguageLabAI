@@ -15,6 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/dd091cac-e4b3-446d-8566-9f84f
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Copy `.env.example` to `.env` and fill in the Firebase configuration values.
+3. For a production deployment, add every `VITE_FIREBASE_*` value from `.env.example` in your hosting provider's environment-variable settings before building or redeploying. `.env` is deliberately excluded from Git, so a GitHub-based deployment will otherwise have no Firebase configuration.
+4. Run the app:
    `npm run dev`
