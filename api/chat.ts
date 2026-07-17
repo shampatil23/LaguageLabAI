@@ -23,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ error: 'messages array is required' });
         }
 
-        const apiKey = process.env.GROQ_API_KEY;
+        const apiKey = process.env.GROQ_API_KEY || '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';
         if (!apiKey) {
             console.error('Server Configuration Error: GROQ_API_KEY is missing');
             return res.status(500).json({
