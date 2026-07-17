@@ -493,7 +493,7 @@ export default function Assessments() {
         {/* LEFT SIDEBAR - Course / Unit / Lesson Navigator */}
         <div className={cn(
           "flex-shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden transition-all duration-200",
-          activeLesson ? "w-72" : "w-full md:w-80"
+          activeLesson ? "hidden md:flex md:w-72" : "w-full md:w-80"
         )}>
           {/* Sidebar header */}
           <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between gap-2">
