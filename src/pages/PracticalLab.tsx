@@ -4,7 +4,7 @@ import { Badge } from '../components/ui/Badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { Input } from '../components/ui/Input';
 import { Search, Filter, Play, Plus, BookOpen, Mic, CheckCircle } from 'lucide-react';
-import { universityPracticals } from '../mockData';
+import { universitylessons as universityPracticals } from '../mockData';
 import { useNavigate } from 'react-router-dom';
 
 export default function PracticalLab() {

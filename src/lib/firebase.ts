@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { getDatabase } from "firebase/database";
+import { getStorage } from "firebase/storage";
 
 // Firebase web config identifies the Firebase project; it is not a private
 // credential and is bundled into every browser client by Firebase's SDK. The
@@ -19,4 +20,5 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const database = getDatabase(app);
+export const storage = getStorage(app);
 export { signInWithEmailAndPassword, signOut };

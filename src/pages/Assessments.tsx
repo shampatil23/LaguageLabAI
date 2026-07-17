@@ -8,23 +8,41 @@ import { cn } from '../lib/utils';
 import { auth, database } from '../lib/firebase';
 import { ref, onValue, set, push } from 'firebase/database';
 
-const mockClasses = [
-  'SEM-1 - Vocabulary'
-];
+type CatalogLesson = {
+  id: string;
+  name: string;
+  type: string;
+  content?: string;
+  resourceUrl?: string;
+  fileName?: string;
+  courseId: string;
+  courseTitle: string;
+  className: string;
+  semester: string;
+  sessionId: string;
+  sessionName: string;
+};
 
-const mockSessions = [
-  'Phonetics :Consonant'
-];
+type CatalogSession = {
+  id: string;
+  name: string;
+  lessons?: Record<string, Omit<CatalogLesson, 'id' | 'courseId' | 'courseTitle' | 'className' | 'semester' | 'sessionId' | 'sessionName'>>;
+};
 
-const mockLessons = [
-  { id: '1', name: 'VOWEL-DIP-6_HTM', type: 'HTML' }
-];
+type CatalogCourse = {
+  id: string;
+  title: string;
+  className: string;
+  semester: string;
+  sessions?: Record<string, Omit<CatalogSession, 'id'>>;
+};
 
 export default function Assessments() {
   const [role, setRole] = useState<string | null>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [myAssignments, setMyAssignments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState<CatalogCourse[]>([]);
 
   // Teacher Selection State
   const [selectedClass, setSelectedClass] = useState<string | null>(null);
@@ -55,7 +73,21 @@ export default function Assessments() {
         setLoading(false);
       }
     });
-    return () => unsubAuth();
+
+    const catalogRef = ref(database, 'courseCatalog');
+    const unsubCatalog = onValue(catalogRef, snap => {
+      const data = snap.val();
+      if (data) {
+        setCourses(Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value })));
+      } else {
+        setCourses([]);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      unsubCatalog();
+    };
   }, []);
 
   const fetchStudents = (teacherId: string) => {
@@ -84,6 +116,24 @@ export default function Assessments() {
     });
   };
 
+  const selectedCourse = courses.find(course => course.id === selectedClass);
+  const availableSessions = selectedCourse
+    ? Object.entries(selectedCourse.sessions || {}).map(([id, session]) => ({ id, ...(session as Omit<CatalogSession, 'id'>) }))
+    : [];
+  const selectedCatalogSession = availableSessions.find(session => session.id === selectedSession);
+  const availableLessons: CatalogLesson[] = selectedCourse && selectedCatalogSession
+    ? Object.entries(selectedCatalogSession.lessons || {}).map(([lessonId, lesson]) => ({
+        id: `${selectedCourse.id}:${selectedCatalogSession.id}:${lessonId}`,
+        ...(lesson as Omit<CatalogLesson, 'id' | 'courseId' | 'courseTitle' | 'className' | 'semester' | 'sessionId' | 'sessionName'>),
+        courseId: selectedCourse.id,
+        courseTitle: selectedCourse.title,
+        className: selectedCourse.className,
+        semester: selectedCourse.semester,
+        sessionId: selectedCatalogSession.id,
+        sessionName: selectedCatalogSession.name
+      }))
+    : [];
+
   const toggleLessonSelection = (id: string) => {
     const newSelection = new Set(selectedLessons);
     if (newSelection.has(id)) {
@@ -95,7 +145,7 @@ export default function Assessments() {
   };
 
   const handleAddSelectedToAssignQueue = () => {
-    const lessonsToAdd = mockLessons.filter(l => selectedLessons.has(l.id) && !assignedLessons.find(al => al.id === l.id));
+    const lessonsToAdd = availableLessons.filter(l => selectedLessons.has(l.id) && !assignedLessons.find(al => al.id === l.id));
     setAssignedLessons([...assignedLessons, ...lessonsToAdd]);
     setSelectedLessons(new Set());
   };
@@ -138,6 +188,13 @@ export default function Assessments() {
              lessonId: lesson.id,
              name: lesson.name,
              type: lesson.type,
+             courseTitle: lesson.courseTitle,
+             className: lesson.className,
+             semester: lesson.semester,
+             sessionName: lesson.sessionName,
+             content: lesson.content || '',
+             resourceUrl: lesson.resourceUrl || '',
+             fileName: lesson.fileName || '',
              status: 'Pending',
              assignedAt: new Date().toISOString()
            }));
@@ -182,10 +239,12 @@ export default function Assessments() {
                     <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center", assignment.status === 'Completed' ? 'bg-success-100 text-success-600' : 'bg-primary-50 text-primary-600')}>
                       {assignment.status === 'Completed' ? <CheckCircle className="w-6 h-6" /> : <BookOpen className="w-6 h-6" />}
                     </div>
-                    <Badge variant={assignment.status === 'Completed' ? 'success' : 'secondary'}>{assignment.status}</Badge>
+                    <Badge variant={assignment.status === 'Completed' ? 'success' : 'default'}>{assignment.status}</Badge>
                   </div>
                   <h3 className="font-semibold text-lg text-slate-900 mb-1">{assignment.name}</h3>
-                  <p className="text-sm text-slate-500 mb-4">Assigned: {new Date(assignment.assignedAt).toLocaleDateString()}</p>
+                  <p className="text-sm text-slate-500 mb-1">{assignment.courseTitle || 'Course'} · {assignment.className || 'Class'} {assignment.semester ? `· ${assignment.semester}` : ''}</p>
+                  {assignment.sessionName && <p className="text-sm text-slate-500 mb-4">Session: {assignment.sessionName}</p>}
+                  <p className="text-xs text-slate-400 mb-4">Assigned: {new Date(assignment.assignedAt).toLocaleDateString()}</p>
                   {assignment.status !== 'Completed' ? (
                     <Button onClick={() => handleStartAssignment(assignment.id)} className="w-full">
                       Start Lesson <PlayCircle className="w-4 h-4 ml-2" />
@@ -309,18 +368,25 @@ export default function Assessments() {
               </CardHeader>
               <div className="flex-1 overflow-y-auto bg-white p-1">
                 <ul className="space-y-0.5">
-                  {mockClasses.map(cls => (
+                  {courses.map(course => (
                     <li 
-                      key={cls}
-                      onClick={() => setSelectedClass(cls)}
+                      key={course.id}
+                      onClick={() => {
+                        setSelectedClass(course.id);
+                        setSelectedSession(null);
+                        setSelectedLessons(new Set());
+                        setPreviewLesson(null);
+                      }}
                       className={cn(
                         "px-3 py-1.5 text-sm cursor-pointer border-l-2",
-                        selectedClass === cls ? "bg-slate-200/70 border-primary-500 font-medium text-slate-900" : "border-transparent text-slate-700 hover:bg-slate-50"
+                        selectedClass === course.id ? "bg-slate-200/70 border-primary-500 font-medium text-slate-900" : "border-transparent text-slate-700 hover:bg-slate-50"
                       )}
                     >
-                      {cls}
+                      <span className="block font-medium">{course.className} · {course.semester}</span>
+                      <span className="block text-xs text-slate-500">{course.title}</span>
                     </li>
                   ))}
+                  {courses.length === 0 && <li className="p-4 text-center text-sm text-slate-500">No courses have been created yet.</li>}
                 </ul>
               </div>
             </Card>
@@ -332,18 +398,24 @@ export default function Assessments() {
               </CardHeader>
               <div className="flex-1 overflow-y-auto bg-white p-1">
                 <ul className="space-y-0.5">
-                  {mockSessions.map(session => (
+                  {!selectedCourse && <li className="p-4 text-center text-sm text-slate-500">Select a class and semester first.</li>}
+                  {availableSessions.map(session => (
                     <li 
-                      key={session}
-                      onClick={() => setSelectedSession(session)}
+                      key={session.id}
+                      onClick={() => {
+                        setSelectedSession(session.id);
+                        setSelectedLessons(new Set());
+                        setPreviewLesson(null);
+                      }}
                       className={cn(
                         "px-3 py-1.5 text-sm cursor-pointer border-l-2",
-                        selectedSession === session ? "bg-slate-200/70 border-primary-500 font-medium text-slate-900" : "border-transparent text-slate-700 hover:bg-slate-50"
+                        selectedSession === session.id ? "bg-slate-200/70 border-primary-500 font-medium text-slate-900" : "border-transparent text-slate-700 hover:bg-slate-50"
                       )}
                     >
-                      {session}
+                      {session.name}
                     </li>
                   ))}
+                  {selectedCourse && availableSessions.length === 0 && <li className="p-4 text-center text-sm text-slate-500">No sessions in this course yet.</li>}
                 </ul>
               </div>
             </Card>
@@ -361,7 +433,17 @@ export default function Assessments() {
                    </TableRow>
                  </TableHeader>
                  <TableBody>
-                   {mockLessons.map(lesson => (
+                   {!selectedCatalogSession && (
+                     <TableRow>
+                       <TableCell colSpan={3} className="py-10 text-center text-slate-500">Select a session to view its lessons.</TableCell>
+                     </TableRow>
+                   )}
+                   {selectedCatalogSession && availableLessons.length === 0 && (
+                     <TableRow>
+                       <TableCell colSpan={3} className="py-10 text-center text-slate-500">No lessons in this session yet.</TableCell>
+                     </TableRow>
+                   )}
+                   {availableLessons.map(lesson => (
                      <TableRow 
                        key={lesson.id} 
                        className={cn(
