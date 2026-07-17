@@ -473,13 +473,16 @@ export default function Reports() {
         </div>
       )}
 
-      <Card className="border-slate-200 rounded-2xl shadow-sm">
-        <CardHeader>
+      <Card className="border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        <CardHeader className="bg-gradient-to-r from-slate-50 to-indigo-50/40">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <CardTitle className="text-sm font-bold">All Test Results</CardTitle>
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Star className="w-4 h-4 text-indigo-600" /> All Test Results
+              <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">{filtered.length}</span>
+            </CardTitle>
             <div className="flex gap-2 flex-wrap">
-              <input value={filterStudent} onChange={e => setFilterStudent(e.target.value)} placeholder="Filter by student..." className="h-8 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
-              <input value={filterCourse} onChange={e => setFilterCourse(e.target.value)} placeholder="Filter by course..." className="h-8 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              <input value={filterStudent} onChange={e => setFilterStudent(e.target.value)} placeholder="Filter by student..." className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 transition-shadow" />
+              <input value={filterCourse} onChange={e => setFilterCourse(e.target.value)} placeholder="Filter by course..." className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-300 transition-shadow" />
             </div>
           </div>
         </CardHeader>
@@ -487,31 +490,48 @@ export default function Reports() {
           {loading ? (
             <div className="py-12 text-center text-slate-400 text-sm">Loading results...</div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-slate-400">
-              <Trophy className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-              <p className="text-sm">No test results yet.</p>
+            <div className="py-16 text-center">
+              <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
+                <Trophy className="w-8 h-8 text-indigo-400" />
+              </div>
+              <p className="text-sm font-bold text-slate-600">No test results yet</p>
+              <p className="text-xs text-slate-400 mt-1">Results will appear here once your students complete their quizzes.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100">
-                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Student</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Lesson</th>
-                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Course</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Correct</th>
-                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Score</th>
-                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-600">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Student</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Lesson</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Course</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Correct</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Score</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-500 uppercase tracking-wide">Date</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(r => (
-                    <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
-                      <td className="px-4 py-3 text-sm font-bold text-slate-800">{r.studentName}</td>
+                    <tr key={r.id} className="border-b border-slate-50 hover:bg-indigo-50/40 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-xs font-black flex items-center justify-center flex-shrink-0">
+                            {(r.studentName || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                          </div>
+                          <span className="text-sm font-bold text-slate-800">{r.studentName}</span>
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-sm text-slate-700">{r.lessonName}</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{r.courseTitle}</td>
                       <td className="px-4 py-3 text-center text-sm text-slate-600">{r.correct}/{r.totalQuestions}</td>
-                      <td className="px-4 py-3 text-center">{getScoreBadge(r.score)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-slate-100 overflow-hidden hidden sm:block">
+                            <div className={cn('h-full rounded-full', r.score >= 90 ? 'bg-emerald-500' : r.score >= 70 ? 'bg-blue-500' : 'bg-rose-500')} style={{ width: `${r.score}%` }} />
+                          </div>
+                          {getScoreBadge(r.score)}
+                        </div>
+                      </td>
                       <td className="px-4 py-3 text-right text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</td>
                     </tr>
                   ))}
