@@ -1,7 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // CORS headers
@@ -18,19 +15,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        const { messages } = req.body;
+        // Safe parsing of req.body
+        const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        const messages = body?.messages;
+
         if (!messages || !Array.isArray(messages)) {
             return res.status(400).json({ error: 'messages array is required' });
         }
 
-        const chatCompletion = await groq.chat.completions.create({
-            messages,
-            model: 'llama-3.3-70b-versatile',
+        const apiKey = process.env.GROQ_API_KEY;
+        if (!apiKey) {
+            console.error('Server Configuration Error: GROQ_API_KEY is missing');
+            return res.status(500).json({
+                error: 'GROQ_API_KEY is not configured on the server',
+                details: 'Please set the GROQ_API_KEY in the Vercel project environment variables.'
+            });
+        }
+
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                messages,
+                model: 'llama-3.3-70b-versatile',
+            })
         });
 
-        res.json({ result: chatCompletion.choices[0]?.message?.content || '' });
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error('Groq API Error Response:', data);
+            return res.status(response.status).json({
+                error: 'Groq API error response',
+                details: data.error?.message || JSON.stringify(data)
+            });
+        }
+
+        res.json({ result: data.choices?.[0]?.message?.content || '' });
     } catch (error) {
-        console.error(error);
+        console.error('Chat API Handler Error:', error);
         res.status(500).json({
             error: 'Failed to generate completion',
             details: error instanceof Error ? error.message : String(error),

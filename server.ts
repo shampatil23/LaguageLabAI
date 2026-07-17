@@ -13,9 +13,6 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-});
 
 async function startServer() {
   const app = express();
@@ -27,11 +24,32 @@ async function startServer() {
   app.post("/api/chat", async (req, res) => {
     try {
       const { messages } = req.body;
-      const chatCompletion = await groq.chat.completions.create({
-        messages,
-        model: "llama-3.3-70b-versatile", // Use active llama-3.3-70b-versatile model
+      const apiKey = process.env.GROQ_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "GROQ_API_KEY is not configured on server" });
+      }
+
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages,
+          model: "llama-3.3-70b-versatile"
+        })
       });
-      res.json({ result: chatCompletion.choices[0]?.message?.content || "" });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return res.status(response.status).json({
+          error: "Groq API error",
+          details: data.error?.message || JSON.stringify(data)
+        });
+      }
+
+      res.json({ result: data.choices?.[0]?.message?.content || "" });
     } catch (error) {
       console.error(error);
       res.status(500).json({
