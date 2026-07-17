@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
         const { email, password } = req.body;
-        const apiKey = process.env.VITE_FIREBASE_API_KEY;
+        const apiKey = process.env.VITE_FIREBASE_API_KEY || "AIzaSyBG02A_z-cHkEOKCXqxnXHqOao0oXzAiJY";
         if (!apiKey) return res.status(500).json({ error: 'Firebase API key not configured' });
 
         const response = await fetch(
