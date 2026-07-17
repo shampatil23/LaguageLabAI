@@ -394,27 +394,28 @@ export default function Reports() {
             a.click();
             URL.revokeObjectURL(url);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-white text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 shadow-md transition-all hover:scale-[1.03] self-start sm:self-auto"
         >
           <FileDown className="w-4 h-4" /> Export Excel
         </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: 'Total Tests', value: results.length, icon: BookOpen, color: 'text-indigo-600 bg-indigo-50' },
-          { label: 'Students Tested', value: uniqueStudents, icon: Users, color: 'text-blue-600 bg-blue-50' },
-          { label: 'Average Score', value: `${avgScore}%`, icon: TrendingUp, color: 'text-amber-600 bg-amber-50' },
-          { label: 'Passed (≥70%)', value: passed, icon: Trophy, color: 'text-emerald-600 bg-emerald-50' },
+          { label: 'Total Tests', value: results.length, icon: BookOpen, gradient: 'from-indigo-500 to-blue-500', bg: 'bg-indigo-50/60' },
+          { label: 'Students Tested', value: uniqueStudents, icon: Users, gradient: 'from-sky-500 to-cyan-500', bg: 'bg-sky-50/60' },
+          { label: 'Average Score', value: `${avgScore}%`, icon: TrendingUp, gradient: 'from-amber-500 to-orange-500', bg: 'bg-amber-50/60' },
+          { label: 'Passed (≥70%)', value: passed, icon: Trophy, gradient: 'from-emerald-500 to-teal-500', bg: 'bg-emerald-50/60' },
         ].map(stat => (
-          <Card key={stat.label} className="border-slate-200 rounded-2xl shadow-sm">
+          <Card key={stat.label} className={cn('border-slate-200 rounded-2xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all', stat.bg)}>
             <CardContent className="p-4 flex items-center gap-3">
-              <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', stat.color)}>
+              <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 bg-gradient-to-br text-white shadow-md', stat.gradient)}>
                 <stat.icon className="w-5 h-5" />
               </div>
               <div>
                 <p className="text-2xl font-black text-slate-900">{stat.value}</p>
-                <p className="text-xs text-slate-500">{stat.label}</p>
+                <p className="text-xs font-semibold text-slate-500">{stat.label}</p>
               </div>
             </CardContent>
           </Card>
@@ -422,22 +423,54 @@ export default function Reports() {
       </div>
 
       {chartData.length > 0 && (
-        <Card className="border-slate-200 rounded-2xl shadow-sm">
-          <CardHeader><CardTitle className="text-sm font-bold">Average Score by Student</CardTitle></CardHeader>
-          <CardContent>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <RechartsBarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
-                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} formatter={(v: any) => [`${v}%`, 'Avg Score']} />
-                  <Bar dataKey="avgScore" fill="#6366f1" radius={[6, 6, 0, 0]} />
-                </RechartsBarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 border-slate-200 rounded-2xl shadow-sm">
+            <CardHeader><CardTitle className="text-sm font-bold flex items-center gap-2"><Target className="w-4 h-4 text-indigo-600" /> Average Score by Student</CardTitle></CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RechartsBarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#818cf8" />
+                        <stop offset="100%" stopColor="#6366f1" />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
+                    <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }} formatter={(v: any) => [`${v}%`, 'Avg Score']} />
+                    <Bar dataKey="avgScore" fill="url(#barGradient)" radius={[8, 8, 0, 0]} maxBarSize={40} />
+                  </RechartsBarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 rounded-2xl shadow-sm">
+            <CardHeader><CardTitle className="text-sm font-bold flex items-center gap-2"><Award className="w-4 h-4 text-amber-500" /> Performance Distribution</CardTitle></CardHeader>
+            <CardContent>
+              <div className="h-64 flex flex-col items-center justify-center">
+                <ResponsiveContainer width="100%" height="80%">
+                  <PieChart>
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={4} dataKey="value">
+                      {pieData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-1">
+                  {pieData.map((d, i) => (
+                    <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                      <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[i] }} />
+                      <span className="text-slate-600">{d.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
       <Card className="border-slate-200 rounded-2xl shadow-sm">
