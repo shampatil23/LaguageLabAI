@@ -268,44 +268,6 @@ export default function Login() {
                   </Button>
                 </motion.div>
 
-                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-6 pt-4 border-t border-slate-100">
-                  <p className="text-xs text-center text-slate-500 font-medium mb-3">Demo Accounts</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
-                      onClick={() => {
-                        setEmail('superadmin@languagelab.com');
-                        setPassword('password123');
-                      }}
-                    >
-                      Super Admin
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
-                      onClick={() => {
-                        setEmail('teacher@example.com');
-                        setPassword('password123');
-                      }}
-                    >
-                      Teacher
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
-                      onClick={() => {
-                        setEmail('student@example.com');
-                        setPassword('password123');
-                      }}
-                    >
-                      Student
-                    </Button>
-                  </div>
-                </motion.div>
               </form>
             </CardContent>
           </Card>
