@@ -1,7 +1,7 @@
 import { Bell, HelpCircle, Search, User, LogOut } from 'lucide-react';
 import { currentUser } from '../mockData';
 import { Input } from './ui/Input';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export function TopRibbon() {
   const navigate = useNavigate();
@@ -49,7 +49,7 @@ export function TopRibbon() {
         </div>
         <button onClick={() => {
           localStorage.clear();
-          window.location.href = '/login';
+          navigate('/login', { replace: true });
         }} className="p-1.5 hover:bg-primary-700 rounded-md transition-colors ml-1 text-primary-200 hover:text-white" title="Logout">
           <LogOut className="h-4 w-4" />
         </button>

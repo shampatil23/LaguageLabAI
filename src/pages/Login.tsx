@@ -72,18 +72,18 @@ export default function Login() {
         localStorage.setItem('userName', userData.name || auth.currentUser?.email || 'User');
         
         // Route based on role
-        if (role === 'student') window.location.href = '/student-dashboard';
-        else if (role === 'teacher' || role === 'admin') window.location.href = '/';
-        else if (role === 'super_admin') window.location.href = '/super-admin';
-        else window.location.href = '/';
+        if (role === 'student') navigate('/student-dashboard', { replace: true });
+        else if (role === 'teacher' || role === 'admin') navigate('/', { replace: true });
+        else if (role === 'super_admin') navigate('/super-admin', { replace: true });
+        else navigate('/', { replace: true });
       } else {
         // Fallback for missing user profile
         // Let's assume teacher for fallback or maybe super_admin if we hardcode a specific email
         const fallbackRole = email.includes('super') ? 'super_admin' : 'teacher';
         localStorage.setItem('userRole', fallbackRole);
         localStorage.setItem('userName', auth.currentUser?.email || 'User');
-        if (fallbackRole === 'super_admin') window.location.href = '/super-admin';
-        else window.location.href = '/';
+        if (fallbackRole === 'super_admin') navigate('/super-admin', { replace: true });
+        else navigate('/', { replace: true });
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to sign in.');
