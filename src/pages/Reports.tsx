@@ -344,10 +344,14 @@ export default function Reports() {
   // ─── TEACHER VIEW ───────────
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Hero Header */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 p-6 sm:p-8 shadow-lg">
+        <div className="absolute -top-12 -right-12 w-48 h-48 rounded-full bg-white/10 pointer-events-none" />
+        <div className="absolute -bottom-16 -left-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+        <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">Test Reports & Analytics</h1>
-          <p className="text-slate-500 text-sm mt-1">Quiz results from your students only.</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-white">Test Reports & Analytics</h1>
+          <p className="text-indigo-100 text-sm mt-1.5">Track quiz performance across your students at a glance.</p>
         </div>
         <button
           onClick={() => {
