@@ -47,6 +47,7 @@ const studentNavItems = [
   { name: 'My Assessments', path: '/assessments', icon: FileCheck },
   { name: 'My Courses', path: '/courses', icon: BookOpen },
   { name: 'AI Conversation', path: '/conversation-practice', icon: BrainCircuit },
+  { name: 'AI Learning', path: '/ai-learning', icon: MonitorPlay },
   { name: 'Notices', path: '/communication', icon: Megaphone },
   { name: 'My Progress', path: '/reports', icon: Target },
 ];

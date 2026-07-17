@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { Card, CardContent } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
-import { Mic, MicOff, AlertCircle, Bot, User, Send, Loader2, FileText, CheckCircle, XCircle, AlertTriangle, Plus, X, ChevronRight, BarChart2, BookOpen, TrendingUp } from 'lucide-react';
+import { Mic, MicOff, AlertCircle, Bot, User, Send, Loader2, FileText, CheckCircle, XCircle, AlertTriangle, Plus, X, ChevronRight, BarChart2, BookOpen, TrendingUp, History, Clock, Star, PenLine } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { auth, database } from '../lib/firebase';
+import { ref, push, set, onValue } from 'firebase/database';
 
 interface Message {
   role: 'ai' | 'user' | 'system';
@@ -17,6 +19,15 @@ interface Report {
   grammarCorrections: { original: string; corrected: string; explanation: string }[];
   overallScore: number;
   summary: string;
+}
+
+interface HistoryEntry {
+  id: string;
+  topic: string;
+  score: number;
+  summary: string;
+  date: string;
+  messageCount: number;
 }
 
 const TOPICS = [
@@ -37,8 +48,31 @@ export default function ConversationPractice() {
   const [report, setReport] = useState<Report | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
   const [conversation, setConversation] = useState<Message[]>([]);
+  const [historyTab, setHistoryTab] = useState(false);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  // Custom topic state
+  const [customTopicMode, setCustomTopicMode] = useState(false);
+  const [customTopicText, setCustomTopicText] = useState('');
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged(user => {
+      if (!user) return;
+      onValue(ref(database, `users/${user.uid}/aiHistory`), snap => {
+        if (snap.exists()) {
+          const data = snap.val();
+          const list: HistoryEntry[] = Object.entries(data)
+            .map(([id, val]: [string, any]) => ({ id, ...val }))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          setHistory(list);
+        } else {
+          setHistory([]);
+        }
+      });
+    });
+    return () => unsub();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,6 +89,25 @@ export default function ConversationPractice() {
       { role: 'ai', text: topic.opener },
     ]);
     setPhase('chat');
+    setCustomTopicMode(false);
+  };
+
+  const startCustomSession = () => {
+    if (!customTopicText.trim()) return;
+    const customTopic = {
+      id: 'custom',
+      label: `🎯 ${customTopicText.trim()}`,
+      system: `You are an English language conversation partner. The student wants to practice English conversation on the topic: "${customTopicText.trim()}". Keep your responses natural, engaging, and at a language learner's level. Help them practice speaking and comprehension on this topic. Ask follow-up questions to keep the conversation going.`,
+      opener: `Great topic! Let's talk about "${customTopicText.trim()}". To start, could you tell me what you know about this topic or why you're interested in it?`,
+    };
+    setSelectedTopic(customTopic);
+    setConversation([
+      { role: 'system', text: customTopic.system },
+      { role: 'ai', text: customTopic.opener },
+    ]);
+    setPhase('chat');
+    setCustomTopicMode(false);
+    setCustomTopicText('');
   };
 
   const handleSendMessage = async () => {
@@ -128,6 +181,8 @@ Generate a JSON report with EXACTLY this structure:
 
 Base the analysis on the student's actual messages. If no grammar errors exist, return empty array for grammarCorrections. Return ONLY the JSON object, nothing else.`;
 
+    let generatedReport: Report | null = null;
+
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -143,16 +198,13 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
       const data = await response.json();
       if (response.ok && data.result) {
         try {
-          // Extract JSON from the response
           const jsonMatch = data.result.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            setReport(parsed);
-          } else {
-            throw new Error('No JSON found');
-          }
+            generatedReport = JSON.parse(jsonMatch[0]);
+            setReport(generatedReport);
+          } else throw new Error('No JSON found');
         } catch {
-          setReport({
+          generatedReport = {
             topic: selectedTopic?.label || 'Practice Session',
             pros: ['You engaged in conversation practice', 'You attempted to communicate in English'],
             cons: ['Report generation encountered an issue'],
@@ -160,11 +212,12 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
             grammarCorrections: [],
             overallScore: 60,
             summary: 'Session completed. Keep practicing to improve your English communication skills.'
-          });
+          };
+          setReport(generatedReport);
         }
       }
     } catch {
-      setReport({
+      generatedReport = {
         topic: selectedTopic?.label || 'Practice Session',
         pros: ['Session completed'],
         cons: ['Could not generate detailed report'],
@@ -172,9 +225,24 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
         grammarCorrections: [],
         overallScore: 50,
         summary: 'Session ended. Please try again for a detailed report.'
-      });
+      };
+      setReport(generatedReport);
     } finally {
       setIsGeneratingReport(false);
+      // Save to Firebase history
+      if (generatedReport) {
+        const user = auth.currentUser;
+        if (user) {
+          const histRef = push(ref(database, `users/${user.uid}/aiHistory`));
+          await set(histRef, {
+            topic: generatedReport.topic,
+            score: generatedReport.overallScore,
+            summary: generatedReport.summary,
+            date: new Date().toISOString(),
+            messageCount: userMessages.length,
+          });
+        }
+      }
     }
   };
 
@@ -191,12 +259,14 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
     setConversation([]);
     setReport(null);
     setInputText('');
+    setCustomTopicMode(false);
+    setCustomTopicText('');
   };
 
   // ─── TOPIC SELECTION PHASE ─────────────────────────────────────────────────
   if (phase === 'select') {
     return (
-      <div className="max-w-3xl mx-auto space-y-8 py-4">
+      <div className="max-w-3xl mx-auto space-y-6 py-4">
         <div className="text-center space-y-2">
           <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-blue-600 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
             <Bot className="w-8 h-8 text-white" />
@@ -207,35 +277,128 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
           </p>
         </div>
 
-        <div>
-          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-4">Choose a Scenario</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {TOPICS.map(topic => (
-              <button
-                key={topic.id}
-                onClick={() => startSession(topic)}
-                className="text-left p-5 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/30 transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-lg font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">{topic.label}</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
-                </div>
-                <p className="text-xs text-slate-500 mt-2 leading-relaxed line-clamp-2">{topic.opener}</p>
-              </button>
-            ))}
-          </div>
+        {/* History Toggle */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Choose a Scenario</h2>
+          <button
+            onClick={() => setHistoryTab(!historyTab)}
+            className={cn(
+              'flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border transition-all',
+              historyTab ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'text-slate-500 border-slate-200 hover:border-indigo-200 hover:text-indigo-600'
+            )}
+          >
+            <History className="w-3.5 h-3.5" />
+            Session History ({history.length})
+          </button>
         </div>
 
-        <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
-          <h3 className="font-bold text-indigo-800 text-sm mb-2 flex items-center gap-2">
-            <FileText className="w-4 h-4" /> How it works
-          </h3>
-          <ul className="text-xs text-indigo-700 space-y-1.5">
-            <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">1.</span> Select a real-world scenario to practice</li>
-            <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">2.</span> Chat with the AI in English — it will respond naturally</li>
-            <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">3.</span> End the session to receive a full report with pros, cons, grammar corrections, and improvement tips</li>
-          </ul>
-        </div>
+        {historyTab ? (
+          <div className="space-y-3">
+            {history.length === 0 ? (
+              <div className="text-center py-10 text-slate-400">
+                <History className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                <p className="text-sm">No sessions yet. Start a conversation to build your history!</p>
+              </div>
+            ) : history.map(h => (
+              <div key={h.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-200 bg-white hover:shadow-sm transition-shadow">
+                <div className={cn(
+                  'w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 font-black text-sm',
+                  h.score >= 80 ? 'bg-emerald-100 text-emerald-700' : h.score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                )}>
+                  {h.score}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-sm truncate">{h.topic}</p>
+                  <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{h.summary}</p>
+                  <div className="flex items-center gap-3 mt-1">
+                    <span className="text-[10px] text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" />{new Date(h.date).toLocaleDateString()}</span>
+                    <span className="text-[10px] text-slate-400">{h.messageCount} messages</span>
+                  </div>
+                </div>
+                <span className={cn(
+                  'text-[10px] font-black uppercase px-2 py-1 rounded-full',
+                  h.score >= 80 ? 'bg-emerald-100 text-emerald-700' : h.score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-red-100 text-red-700'
+                )}>
+                  {h.score >= 80 ? 'Great' : h.score >= 60 ? 'Good' : 'Practice'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {TOPICS.map(topic => (
+                <button
+                  key={topic.id}
+                  onClick={() => startSession(topic)}
+                  className="text-left p-5 rounded-2xl border border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/30 transition-all group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold text-slate-800 group-hover:text-indigo-700 transition-colors">{topic.label}</span>
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+                  </div>
+                  <p className="text-xs text-slate-500 mt-2 leading-relaxed line-clamp-2">{topic.opener}</p>
+                </button>
+              ))}
+
+              {/* Custom Topic Card */}
+              {!customTopicMode ? (
+                <button
+                  onClick={() => setCustomTopicMode(true)}
+                  className="text-left p-5 rounded-2xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:border-indigo-400 hover:bg-indigo-50 transition-all group"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-bold text-indigo-700 group-hover:text-indigo-800">🎯 Enter Your Own Topic</span>
+                    <PenLine className="w-4 h-4 text-indigo-400 group-hover:text-indigo-600 transition-colors" />
+                  </div>
+                  <p className="text-xs text-indigo-500 mt-2 leading-relaxed">Type any topic and the AI will have a conversation with you about it in English.</p>
+                </button>
+              ) : (
+                <div className="p-5 rounded-2xl border-2 border-indigo-300 bg-indigo-50/50 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <PenLine className="w-4 h-4 text-indigo-600" />
+                    <span className="text-sm font-bold text-indigo-800">Your Custom Topic</span>
+                  </div>
+                  <input
+                    autoFocus
+                    value={customTopicText}
+                    onChange={e => setCustomTopicText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') startCustomSession(); }}
+                    placeholder="e.g. Climate change, Space exploration, My favorite sport..."
+                    className="w-full rounded-xl border border-indigo-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={startCustomSession}
+                      disabled={!customTopicText.trim()}
+                      className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold py-2 rounded-xl transition-all disabled:opacity-40"
+                    >
+                      Start Session
+                    </button>
+                    <button
+                      onClick={() => { setCustomTopicMode(false); setCustomTopicText(''); }}
+                      className="px-3 py-2 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
+              <h3 className="font-bold text-indigo-800 text-sm mb-2 flex items-center gap-2">
+                <FileText className="w-4 h-4" /> How it works
+              </h3>
+              <ul className="text-xs text-indigo-700 space-y-1.5">
+                <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">1.</span> Select a scenario or enter your own topic</li>
+                <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">2.</span> Chat with the AI in English — it will respond naturally</li>
+                <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">3.</span> End the session to receive a full report with pros, cons, grammar corrections, and improvement tips</li>
+                <li className="flex items-start gap-2"><span className="font-bold text-indigo-500 mt-0.5">4.</span> All sessions are saved in your history for future reference</li>
+              </ul>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -358,6 +521,10 @@ Base the analysis on the student's actual messages. If no grammar errors exist, 
                 <p className="text-sm text-emerald-700 font-semibold">No significant grammar errors detected! Great job!</p>
               </div>
             )}
+
+            <p className="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+              <Star className="w-3 h-3" /> This report has been saved to your AI History
+            </p>
           </div>
         )}
       </div>

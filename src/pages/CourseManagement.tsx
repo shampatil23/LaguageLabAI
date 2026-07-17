@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
@@ -6,11 +6,12 @@ import {
   FileVideo, FileAudio, FileText, Upload, Plus, Folder, MoreVertical, Users,
   Video, Mic, Monitor, Play, Square, Save, ArrowLeft, Type, Bold, Italic,
   Underline, AlignLeft, AlignCenter, AlignRight, Link, Image as ImageIcon,
-  Undo, Redo, LayoutTemplate, BookOpen, CheckCircle, Clock, Lock, ClipboardList, GraduationCap
+  Undo, Redo, LayoutTemplate, BookOpen, CheckCircle, Clock, Lock, ClipboardList, GraduationCap,
+  PlayCircle, AlertCircle, Sparkles, ChevronRight, ChevronDown, CheckCircle2, Bot
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, database } from '../lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, set, push } from 'firebase/database';
 
 const mockCourses = [
   { id: '1', code: 'ENG101', name: 'Conversational English', students: 42, modules: 12, status: 'Active' },
@@ -22,223 +23,436 @@ const mockCourses = [
 export default function CourseManagement() {
   const role = localStorage.getItem('userRole') || 'teacher';
   const [view, setView] = useState<'list' | 'create_lesson' | 'create_course'>(role === 'teacher' ? 'create_course' : 'list');
-  const [myAssignments, setMyAssignments] = useState<any[]>([]);
-  const [testResults, setTestResults] = useState<any[]>([]);
+  const [savedCourses, setSavedCourses] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<any | null>(null);
+  const [activeLesson, setActiveLesson] = useState<any | null>(null);
+
+  // Lesson player states
+  const [quizMode, setQuizMode] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const [quizScore, setQuizScore] = useState<number | null>(null);
+  const [showInfoOverlay, setShowInfoOverlay] = useState(false);
+  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (role !== 'student') return;
     const unsubAuth = auth.onAuthStateChanged(user => {
       if (!user) return;
-      onValue(ref(database, 'users/' + user.uid + '/assignments'), snap => {
+      onValue(ref(database, `users/${user.uid}/savedCourses`), snap => {
         if (snap.exists()) {
-          const data = snap.val();
-          setMyAssignments(Object.entries(data).map(([id, val]: [string, any]) => ({ id, ...val })));
+          const list = Object.entries(snap.val()).map(([key, val]: [string, any]) => ({
+            key,
+            ...val,
+            lessons: val.lessons ? Object.values(val.lessons) : []
+          }));
+          setSavedCourses(list);
         } else {
-          setMyAssignments([]);
-        }
-      });
-      onValue(ref(database, 'testResults'), snap => {
-        if (snap.exists()) {
-          const all = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({ id, ...val }));
-          setTestResults(all.filter(r => r.studentId === user.uid));
+          setSavedCourses([]);
         }
       });
     });
     return () => unsubAuth();
   }, [role]);
 
-  // ─── STUDENT VIEW ─────────────────────────────────────────────────────────
-  if (role === 'student') {
-    // Group by course
-    const byCourse: Record<string, any[]> = {};
-    myAssignments.forEach(a => {
-      const key = a.courseTitle || 'Uncategorized';
-      if (!byCourse[key]) byCourse[key] = [];
-      byCourse[key].push(a);
+  const openLesson = (lesson: any) => {
+    setActiveLesson(lesson);
+    setQuizMode(false);
+    setQuizAnswers({});
+    setQuizSubmitted(false);
+    setQuizScore(null);
+    setShowInfoOverlay(true);
+    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => setShowInfoOverlay(false), 3000);
+  };
+
+  const markLessonComplete = async () => {
+    const user = auth.currentUser;
+    if (!user || !selectedCourse || !activeLesson) return;
+    try {
+      const dbPath = `users/${user.uid}/savedCourses/${selectedCourse.key}/lessons/${activeLesson.id}/status`;
+      await set(ref(database, dbPath), 'Completed');
+      setActiveLesson(p => ({ ...p, status: 'Completed' }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const submitQuiz = async () => {
+    const user = auth.currentUser;
+    if (!user || !selectedCourse || !activeLesson?.test) return;
+
+    const questions = activeLesson.test.questions || [];
+    let correct = 0;
+    questions.forEach((q: any, idx: number) => {
+      if (quizAnswers[idx] === q.a) correct++;
     });
 
-    const totalCompleted = myAssignments.filter(a => a.status === 'Completed').length;
-    const totalPending = myAssignments.filter(a => a.status !== 'Completed').length;
-    const testsGiven = testResults.length;
-    const avgScore = testsGiven
-      ? Math.round(testResults.reduce((s, r) => s + r.score, 0) / testsGiven)
-      : null;
+    const score = Math.round((correct / questions.length) * 100);
+    setQuizScore(score);
+    setQuizSubmitted(true);
+
+    try {
+      // Save test result under main testResults table
+      const newResultRef = push(ref(database, 'testResults'));
+      const quizResult = {
+        studentId: user.uid,
+        studentName: user.displayName || user.email || 'Student',
+        lessonName: activeLesson.name,
+        courseTitle: selectedCourse.title,
+        testTitle: activeLesson.test.title || 'Lesson Quiz',
+        totalQuestions: questions.length,
+        correct,
+        score,
+        submittedAt: new Date().toISOString()
+      };
+      await set(newResultRef, quizResult);
+
+      // Save score to this savedCourse's lesson record
+      const scorePath = `users/${user.uid}/savedCourses/${selectedCourse.key}/lessons/${activeLesson.id}/testScore`;
+      await set(ref(database, scorePath), score);
+
+      // Save status as Completed
+      const statusPath = `users/${user.uid}/savedCourses/${selectedCourse.key}/lessons/${activeLesson.id}/status`;
+      await set(ref(database, statusPath), 'Completed');
+
+      // Update active lesson local state
+      setActiveLesson(p => ({ ...p, status: 'Completed', testScore: score }));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const getYoutubeIdS = (url: string) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const m = url.match(regExp);
+    return (m && m[2].length === 11) ? m[2] : null;
+  };
+  const getDriveIdS = (url: string) => {
+    const m = url.match(/\/d\/([^/]+)/);
+    return m ? m[1] : null;
+  };
+
+  const renderMedia = (url: string, type: string) => {
+    if (!url) return <div className="flex items-center justify-center h-full text-slate-400 text-sm">No video resource.</div>;
+    if (type === 'Video') {
+      const ytId = getYoutubeIdS(url);
+      if (ytId) return <iframe className="w-full h-full rounded-none" src={`https://www.youtube.com/embed/${ytId}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
+      const driveId = getDriveIdS(url);
+      if (driveId) return <iframe className="w-full h-full" src={`https://drive.google.com/file/d/${driveId}/preview`} allow="autoplay" />;
+      return <video src={url} controls className="w-full h-full" />;
+    }
+    return <iframe src={url} className="w-full h-full" title="Lesson Content" />;
+  };
+
+  // ─── STUDENT VIEW ─────────────────────────────────────────────────────────
+  if (role === 'student') {
+    if (selectedCourse) {
+      // Group lessons in the selected saved course by unit (sessionName)
+      const byUnit: Record<string, any[]> = {};
+      selectedCourse.lessons.forEach((l: any) => {
+        const unit = l.sessionName || 'General';
+        if (!byUnit[unit]) byUnit[unit] = [];
+        byUnit[unit].push(l);
+      });
+
+      return (
+        <div className="flex gap-0 h-[calc(100vh-5rem)] -m-6 overflow-hidden">
+          {/* Left panel lesson list */}
+          <div className={cn(
+            "flex-shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden transition-all duration-200",
+            activeLesson ? "w-72" : "w-full md:w-80"
+          )}>
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center gap-2">
+              <button
+                onClick={() => { setSelectedCourse(null); setActiveLesson(null); }}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-500"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <h1 className="text-sm font-bold text-slate-900 truncate">{selectedCourse.title}</h1>
+                <p className="text-[10px] text-slate-500">{selectedCourse.lessons.length} lessons saved</p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-2">
+              {Object.entries(byUnit).map(([unitName, lessons]) => {
+                const isCollapsed = collapsedUnits.has(unitName);
+                const unitDone = lessons.filter(l => l.status === 'Completed').length;
+                const unitPct = Math.round((unitDone / lessons.length) * 100);
+                return (
+                  <div key={unitName} className="mb-1">
+                    <button
+                      onClick={() => setCollapsedUnits(prev => {
+                        const next = new Set(prev);
+                        if (next.has(unitName)) next.delete(unitName); else next.add(unitName);
+                        return next;
+                      })}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isCollapsed ? <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
+                        <span className="text-xs font-bold text-slate-700 truncate">{unitName}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span className="text-[9px] font-bold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">{unitPct}%</span>
+                      </div>
+                    </button>
+                    {!isCollapsed && lessons.map((l: any) => (
+                      <button
+                        key={l.id}
+                        onClick={() => openLesson(l)}
+                        className={cn(
+                          "w-full text-left pl-8 pr-3 py-2.5 flex items-start gap-2.5 border-b border-slate-50 transition-colors hover:bg-slate-50",
+                          activeLesson?.id === l.id && "bg-indigo-50 border-l-4 border-indigo-500 pl-7"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5",
+                          l.status === 'Completed' ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'
+                        )}>
+                          {l.status === 'Completed' ? <CheckCircle className="w-3.5 h-3.5" /> : <BookOpen className="w-3 h-3" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={cn("text-xs font-semibold truncate", activeLesson?.id === l.id ? 'text-indigo-700 font-bold' : 'text-slate-850')}>{l.name}</p>
+                          {l.testScore !== undefined && l.testScore !== null && (
+                            <span className="inline-block text-[9px] font-bold text-green-700 bg-green-50 px-1 py-0.2 rounded mt-0.5">Quiz: {l.testScore}%</span>
+                          )}
+                        </div>
+                        {l.test && <span className="text-[8px] bg-amber-50 text-amber-600 border border-amber-250 px-1 rounded font-bold">Quiz</span>}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Right panel lesson player */}
+          {activeLesson ? (
+            <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0d1117' }}>
+              <div className="flex items-center justify-between px-5 py-2.5 bg-[#161b22] border-b border-[#30363d] flex-shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <button onClick={() => { setActiveLesson(null); setQuizMode(false); }} className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all">
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                  <div className="min-w-0">
+                    <p className="text-white font-bold text-sm truncate">{activeLesson.name}</p>
+                    <p className="text-slate-500 text-xs truncate">{selectedCourse.title} · {activeLesson.sessionName}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {activeLesson.status !== 'Completed' ? (
+                    <Button onClick={markLessonComplete} className="bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-bold px-4 h-8 rounded-lg shadow">
+                      Mark Complete
+                    </Button>
+                  ) : (
+                    <span className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold bg-emerald-500/10 px-3 py-1 bg-[#161b22] rounded-lg border border-emerald-500/20">
+                      Completed
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {!quizMode ? (
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#0d1117]">
+                  {/* VIDEO / CONTENT AREA — stacked configuration, no overlap */}
+                  <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                    {activeLesson.resourceUrl && (
+                      <div className="h-64 sm:h-80 md:h-[400px] w-full bg-black flex-shrink-0 relative flex items-center justify-center">
+                        {renderMedia(activeLesson.resourceUrl, activeLesson.type)}
+                      </div>
+                    )}
+                    {activeLesson.content ? (
+                      <div className="flex-1 overflow-y-auto border-t border-[#30363d] bg-[#0d1117]">
+                        <div className="max-w-2xl mx-auto p-8 text-slate-100 text-lg md:text-xl font-medium leading-relaxed whitespace-pre-wrap select-text" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
+                      </div>
+                    ) : !activeLesson.resourceUrl ? (
+                      <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">No content available.</div>
+                    ) : null}
+
+                    {showInfoOverlay && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-end p-6 pointer-events-none z-10 transition-opacity">
+                        <span className="text-xs text-amber-400 font-bold uppercase tracking-widest mb-1">{activeLesson.type}</span>
+                        <h2 className="text-white text-xl font-black">{activeLesson.name}</h2>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* POST-COMPLETION BANNER */}
+                  {activeLesson.status === 'Completed' && (
+                    <div className="flex-shrink-0 bg-[#161b22] border-t border-[#30363d] px-5 py-3 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                          <CheckCircle className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="text-white text-sm font-bold">Lesson Completed!</p>
+                          <p className="text-slate-500 text-xs">
+                            {activeLesson.testScore !== undefined && activeLesson.testScore !== null
+                              ? `Quiz score: ${activeLesson.testScore}%`
+                              : activeLesson.test ? 'A quiz is available — take it below.' : 'No quiz for this lesson.'}
+                          </p>
+                        </div>
+                      </div>
+                      {activeLesson.test && (activeLesson.testScore === undefined || activeLesson.testScore === null) && (
+                        <Button onClick={() => { setQuizMode(true); setQuizAnswers({}); setQuizSubmitted(false); setQuizScore(null); }}
+                          className="bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm px-5 h-9 flex-shrink-0">
+                          Take Quiz
+                        </Button>
+                      )}
+                      {activeLesson.test && activeLesson.testScore !== undefined && activeLesson.testScore !== null && (
+                        <span className="text-xs font-bold text-slate-400 border border-slate-750 bg-slate-800/40 px-3.5 py-1.5 rounded-lg shadow-sm">
+                          Quiz Completed
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* QUIZ VIEW */
+                <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-slate-900">
+                  <div className="max-w-2xl mx-auto">
+                    {!quizSubmitted ? (
+                      <>
+                        <div className="mb-6">
+                          <p className="text-xs text-amber-400 uppercase tracking-wider font-bold">Quiz</p>
+                          <h2 className="text-white text-2xl font-bold mt-1">{activeLesson.test.title || 'Assessment'}</h2>
+                        </div>
+                        <div className="space-y-6">
+                          {(activeLesson.test.questions || []).map((q: any, idx: number) => (
+                            <div key={idx} className="bg-[#1e293b] rounded-xl p-6 border border-slate-700">
+                              <p className="text-white font-semibold text-sm mb-4"><span className="text-amber-400 mr-2">{idx + 1}.</span>{q.q}</p>
+                              <div className="grid grid-cols-1 gap-2">
+                                {(['a', 'b', 'c', 'd'] as const).map(opt => (
+                                  q[opt] && (
+                                    <button key={opt}
+                                      onClick={() => setQuizAnswers(prev => ({ ...prev, [idx]: opt }))}
+                                      className={cn(
+                                        "text-left px-4 py-3 rounded-lg text-sm border transition-all",
+                                        quizAnswers[idx] === opt
+                                          ? "bg-indigo-600 border-indigo-400 text-white font-semibold"
+                                          : "bg-slate-850 border-slate-700 text-slate-350 hover:border-indigo-500 hover:text-white"
+                                      )}>
+                                      <span className="font-bold mr-2 text-slate-400 uppercase">{opt}.</span>{q[opt]}
+                                    </button>
+                                  )
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          <div className="mt-8 flex justify-end">
+                            <Button onClick={submitQuiz}
+                              disabled={Object.keys(quizAnswers).length < (activeLesson.test.questions || []).length}
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-8 py-3 rounded-xl disabled:opacity-40 shadow-lg">
+                              Submit Quiz
+                            </Button>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-12 space-y-6 bg-slate-850 border border-slate-700 rounded-2xl p-8">
+                        <div className="w-16 h-16 bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 rounded-2xl flex items-center justify-center mx-auto">
+                          <CheckCircle2 className="w-8 h-8 animate-bounce" />
+                        </div>
+                        <div>
+                          <h2 className="text-2xl font-black text-white">Quiz Submitted Successfully!</h2>
+                          <p className="text-slate-400 text-sm mt-1">Great job finishing the evaluation check.</p>
+                        </div>
+                        <div className="max-w-xs mx-auto p-4 bg-slate-900 border border-slate-750 rounded-xl">
+                          <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">Your Score</p>
+                          <p className={cn('text-4xl font-black mt-2', quizScore >= 70 ? 'text-emerald-500' : 'text-rose-500')}>{quizScore}%</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Passing score: 70%</p>
+                        </div>
+                        <Button onClick={() => setQuizMode(false)} className="bg-slate-800 hover:bg-slate-750 text-white border border-slate-700 text-sm font-semibold py-2 px-6">
+                          Back to Lesson
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-[#f8fafc] text-center">
+              <BookOpen className="w-12 h-12 text-slate-300 mb-3" />
+              <h2 className="text-slate-700 font-bold">Select a Lesson</h2>
+              <p className="text-slate-450 text-xs mt-1">Choose a saved lesson from the left menu to start learning.</p>
+            </div>
+          )}
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">My Courses</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Your enrolled courses and progress — read-only view</p>
+          <h1 className="text-2xl font-black text-slate-900">Saved Courses</h1>
+          <p className="text-slate-500 text-sm mt-0.5">Your lifetime accessed courses (available even offline or after assignment expiration)</p>
         </div>
 
-        {/* Summary stats */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[
-            { icon: BookOpen, label: 'Total Lessons', value: myAssignments.length, color: 'bg-blue-50 text-blue-600' },
-            { icon: CheckCircle, label: 'Completed', value: totalCompleted, color: 'bg-emerald-50 text-emerald-600' },
-            { icon: Clock, label: 'Pending', value: totalPending, color: 'bg-orange-50 text-orange-600' },
-            { icon: ClipboardList, label: 'Tests Taken', value: testsGiven, color: 'bg-purple-50 text-purple-600' },
-          ].map(s => (
-            <Card key={s.label} className="border-slate-200 shadow-sm rounded-2xl">
-              <CardContent className="p-4 flex items-center gap-3">
-                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', s.color)}>
-                  <s.icon className="w-5 h-5" />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500">{s.label}</p>
-                  <p className="text-xl font-black text-slate-900">{s.value}</p>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {myAssignments.length === 0 ? (
-          <div className="py-20 text-center">
-            <BookOpen className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-            <p className="text-slate-400 font-medium">No courses assigned yet.</p>
-            <p className="text-slate-400 text-sm mt-1">Your teacher will assign lessons soon.</p>
-          </div>
+        {savedCourses.length === 0 ? (
+          <Card className="border-slate-200 shadow-sm rounded-2xl">
+            <CardContent className="py-20 text-center space-y-4">
+              <div className="w-16 h-16 bg-slate-50 text-slate-300 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center mx-auto">
+                <BookOpen className="w-8 h-8" />
+              </div>
+              <div>
+                <p className="text-slate-650 font-bold">No saved courses yet</p>
+                <p className="text-slate-450 text-xs mt-1 max-w-sm mx-auto">
+                  Go to "My Assessments" page and click the "Save" button next to any assigned course header to save it forever.
+                </p>
+              </div>
+              <Button onClick={() => window.location.href = '/assessments'} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold py-2 rounded-xl">
+                Go to My Assessments
+              </Button>
+            </CardContent>
+          </Card>
         ) : (
-          <div className="space-y-6">
-            {Object.entries(byCourse).map(([courseTitle, lessons]) => {
-              const done = lessons.filter(l => l.status === 'Completed').length;
-              const pct = Math.round((done / lessons.length) * 100);
-              const courseTests = lessons.filter(l => l.testScore !== undefined);
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {savedCourses.map(course => {
+              const comp = course.lessons.filter((l: any) => l.status === 'Completed').length;
+              const pct = Math.round((comp / course.lessons.length) * 100);
               return (
-                <Card key={courseTitle} className="border-slate-200 shadow-sm rounded-2xl overflow-hidden">
-                  {/* Course Header */}
-                  <div className="bg-gradient-to-r from-indigo-50 to-slate-50 border-b border-slate-200 px-5 py-4">
-                    <div className="flex items-center justify-between">
+                <Card key={course.key} className="border-slate-250 hover:shadow-md transition-shadow rounded-2xl overflow-hidden bg-white">
+                  <div className="p-5 flex flex-col justify-between h-full space-y-4">
+                    <div className="flex items-start justify-between min-w-0">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center flex-shrink-0">
                           <BookOpen className="w-5 h-5" />
                         </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900">{courseTitle}</h3>
-                          <p className="text-xs text-slate-500">{lessons[0]?.className} · {lessons[0]?.semester}</p>
+                        <div className="min-w-0">
+                          <h3 className="font-bold text-slate-850 truncate">{course.title}</h3>
+                          <p className="text-[10px] text-slate-500">{course.className} · {course.semester}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {courseTests.length > 0 && (
-                          <div className="text-right">
-                            <p className="text-xs text-slate-500">Avg Score</p>
-                            <p className={cn('text-sm font-black', courseTests.reduce((s, l) => s + l.testScore, 0) / courseTests.length >= 70 ? 'text-emerald-600' : 'text-red-500')}>
-                              {Math.round(courseTests.reduce((s, l) => s + l.testScore, 0) / courseTests.length)}%
-                            </p>
-                          </div>
-                        )}
-                        <div className="text-right">
-                          <p className="text-xs text-slate-500">Progress</p>
-                          <p className="text-sm font-black text-indigo-700">{done}/{lessons.length}</p>
-                        </div>
-                        <Badge variant={pct === 100 ? 'success' : 'default'}>{pct}%</Badge>
+                      <Badge variant={pct === 100 ? 'success' : 'default'} className="flex-shrink-0">{pct}%</Badge>
+                    </div>
+
+                    <div className="w-full">
+                      <div className="flex justify-between text-[10px] text-slate-500 mb-1">
+                        <span>Progress: {comp}/{course.lessons.length} completed</span>
+                        <span>Saved: {new Date(course.savedAt).toLocaleDateString()}</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5">
+                        <div className="bg-indigo-500 h-1.5 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
-                    <div className="mt-3 w-full bg-slate-200 rounded-full h-1.5">
-                      <div className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        onClick={() => setSelectedCourse(course)}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 h-8 rounded-lg"
+                      >
+                        Open Course <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                      </Button>
                     </div>
                   </div>
-
-                  {/* Lesson List - read only */}
-                  <CardContent className="p-0">
-                    <div className="divide-y divide-slate-50">
-                      {lessons.map((lesson, idx) => {
-                        const isCompleted = lesson.status === 'Completed';
-                        const hasTest = !!lesson.test;
-                        const testTaken = lesson.testScore !== undefined;
-                        const score = lesson.testScore;
-
-                        return (
-                          <div key={lesson.id} className={cn(
-                            'flex items-center gap-4 px-5 py-3',
-                            isCompleted ? 'bg-white' : 'bg-slate-50/50'
-                          )}>
-                            {/* Status icon */}
-                            <div className={cn('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm font-bold',
-                              isCompleted ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400')}>
-                              {isCompleted ? <CheckCircle className="w-4 h-4" /> : <span className="text-xs">{idx + 1}</span>}
-                            </div>
-
-                            {/* Lesson info */}
-                            <div className="flex-1 min-w-0">
-                              <p className={cn('text-sm font-semibold truncate', isCompleted ? 'text-slate-800' : 'text-slate-600')}>
-                                {lesson.name}
-                              </p>
-                              <p className="text-xs text-slate-400 truncate">{lesson.sessionName}</p>
-                            </div>
-
-                            {/* Status badges - read only */}
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              {/* Completion status */}
-                              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                                isCompleted
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : 'bg-slate-100 text-slate-500 border-slate-200')}>
-                                {isCompleted ? '✓ Done' : 'Pending'}
-                              </span>
-
-                              {/* Test status */}
-                              {hasTest && (
-                                testTaken ? (
-                                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full border',
-                                    score >= 70
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-red-50 text-red-600 border-red-200')}>
-                                    Quiz: {score}%
-                                  </span>
-                                ) : (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 text-amber-600 border-amber-200">
-                                    Quiz Available
-                                  </span>
-                                )
-                              )}
-
-                              {/* Access indicator - locked = access removed */}
-                              {!isCompleted && idx > 0 && lessons[idx - 1]?.status !== 'Completed' && (
-                                <span title="Complete previous lesson first"><Lock className="w-3.5 h-3.5 text-slate-300" /></span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
                 </Card>
               );
             })}
-
-            {/* Test Results Summary */}
-            {testResults.length > 0 && (
-              <Card className="border-slate-200 shadow-sm rounded-2xl">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <GraduationCap className="w-5 h-5 text-purple-500" /> Quiz History
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y divide-slate-50">
-                    {[...testResults].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()).map(r => (
-                      <div key={r.id} className="flex items-center gap-4 px-5 py-3">
-                        <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0',
-                          r.score >= 70 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600')}>
-                          {r.score}%
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-800 truncate">{r.lessonName}</p>
-                          <p className="text-xs text-slate-400">{r.correct}/{r.totalQuestions} correct · {new Date(r.submittedAt).toLocaleDateString()}</p>
-                        </div>
-                        <span className={cn('text-xs font-bold px-2 py-0.5 rounded-full',
-                          r.score >= 70 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600')}>
-                          {r.score >= 70 ? 'Passed' : 'Needs Work'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         )}
       </div>

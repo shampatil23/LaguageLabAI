@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
 import { Badge } from '../components/ui/Badge';
-import { BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { FileDown, Trophy, TrendingUp, Users, BookOpen } from 'lucide-react';
+import {
+  BarChart as RechartsBarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis
+} from 'recharts';
+import { FileDown, Trophy, TrendingUp, Users, BookOpen, Star, Zap, Award, Target, Brain, MessageSquare } from 'lucide-react';
 import { database, auth } from '../lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { cn } from '../lib/utils';
@@ -26,24 +27,23 @@ type TestResult = {
   submittedAt: string;
 };
 
+const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+
 export default function Reports() {
   const role = localStorage.getItem('userRole') || 'teacher';
   const [results, setResults] = useState<TestResult[]>([]);
+  const [aiHistory, setAiHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStudent, setFilterStudent] = useState('');
   const [filterCourse, setFilterCourse] = useState('');
   const [teacherStudentIds, setTeacherStudentIds] = useState<Set<string>>(new Set());
-  const [currentUid, setCurrentUid] = useState<string | null>(null);
 
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged(user => {
       if (!user) { setLoading(false); return; }
-      setCurrentUid(user.uid);
 
       if (role === 'student') {
-        // Student: fetch only their own results from testResults
-        const resultsRef = ref(database, 'testResults');
-        onValue(resultsRef, snap => {
+        onValue(ref(database, 'testResults'), snap => {
           const data = snap.val();
           if (data) {
             const list: TestResult[] = Object.entries(data)
@@ -51,12 +51,17 @@ export default function Reports() {
               .filter(r => r.studentId === user.uid);
             setResults(list.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()));
           } else { setResults([]); }
+        });
+
+        onValue(ref(database, `users/${user.uid}/aiHistory`), snap => {
+          if (snap.exists()) {
+            const data = snap.val();
+            setAiHistory(Object.entries(data).map(([id, val]: [string, any]) => ({ id, ...val })));
+          } else { setAiHistory([]); }
           setLoading(false);
         });
       } else {
-        // Teacher: first get their students, then filter results
-        const usersRef = ref(database, 'users');
-        onValue(usersRef, snap => {
+        onValue(ref(database, 'users'), snap => {
           const data = snap.val();
           if (data) {
             const myStudentIds = new Set<string>(
@@ -65,9 +70,7 @@ export default function Reports() {
                 .map(([id]) => id)
             );
             setTeacherStudentIds(myStudentIds);
-
-            const resultsRef = ref(database, 'testResults');
-            onValue(resultsRef, rsnap => {
+            onValue(ref(database, 'testResults'), rsnap => {
               const rdata = rsnap.val();
               if (rdata) {
                 const list: TestResult[] = Object.entries(rdata)
@@ -94,6 +97,28 @@ export default function Reports() {
   const uniqueStudents = new Set(results.map(r => r.studentId)).size;
   const passed = results.filter(r => r.score >= 70).length;
 
+  // Chart configurations
+  const lineData = results.slice(0, 10).reverse().map((r, i) => ({
+    name: `Q${i + 1}`,
+    score: r.score,
+    lesson: r.lessonName,
+  }));
+
+  const pieData = [
+    { name: 'Excellent (90+)', value: results.filter(r => r.score >= 90).length },
+    { name: 'Good (70-89)', value: results.filter(r => r.score >= 70 && r.score < 90).length },
+    { name: 'Needs Work (<70)', value: results.filter(r => r.score < 70).length },
+  ].filter(d => d.value > 0);
+
+  const radarData = [
+    { subject: 'Quiz Avg', score: avgScore },
+    { subject: 'Pass Rate', score: results.length > 0 ? Math.round((passed / results.length) * 100) : 0 },
+    { subject: 'Consistency', score: results.length >= 3 ? 80 : results.length >= 1 ? 50 : 20 },
+    { subject: 'AI Practice', score: aiHistory.length > 0 ? Math.round(aiHistory.reduce((s, h) => s + (h.score || 0), 0) / aiHistory.length) : 0 },
+    { subject: 'Completion', score: results.length > 0 ? Math.min(100, results.length * 15) : 0 },
+  ];
+
+  // Student bar chart (teacher view)
   const studentScores: Record<string, { name: string; total: number; count: number }> = {};
   results.forEach(r => {
     if (!studentScores[r.studentId]) studentScores[r.studentId] = { name: r.studentName, total: 0, count: 0 };
@@ -106,49 +131,246 @@ export default function Reports() {
   })).slice(0, 10);
 
   const getScoreBadge = (score: number) => {
-    if (score >= 90) return <Badge variant="success" className="font-bold">{score}%</Badge>;
-    if (score >= 70) return <Badge className="bg-blue-100 text-blue-700 border-blue-200 font-bold">{score}%</Badge>;
-    return <Badge variant="danger" className="font-bold">{score}%</Badge>;
+    if (score >= 90) return <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full text-xs">{score}%</span>;
+    if (score >= 70) return <span className="font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full text-xs">{score}%</span>;
+    return <span className="font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full text-xs">{score}%</span>;
   };
 
+  // ─── STUDENT VIEW ───────────
+  if (role === 'student') {
+    // Compute achievements
+    const achievements = [
+      { icon: '🏆', title: 'First Test', desc: 'Completed your first quiz', unlocked: results.length >= 1 },
+      { icon: '⭐', title: 'High Achiever', desc: 'Average score above 80%', unlocked: avgScore >= 80 },
+      { icon: '💯', title: 'Perfect Score', desc: 'Got 100% on a quiz', unlocked: results.some(r => r.score === 100) },
+      { icon: '🔥', title: 'On A Roll', desc: 'Completed 5+ quizzes', unlocked: results.length >= 5 },
+      { icon: '🤖', title: 'AI Practitioner', desc: 'Completed an AI conversation', unlocked: aiHistory.length >= 1 },
+      { icon: '🎯', title: 'Consistent Learner', desc: 'Scored 70%+ on 3 quizzes in a row', unlocked: (() => { let streak = 0; for (const r of [...results].reverse()) { if (r.score >= 70) streak++; else break; } return streak >= 3; })() },
+    ];
+    const avgAiScore = aiHistory.length > 0 ? Math.round(aiHistory.reduce((s, h) => s + (h.score || 0), 0) / aiHistory.length) : 0;
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">My Progress</h1>
+          <p className="text-slate-500 text-sm mt-1">Track your learning journey, scores, and achievements.</p>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[
+            { label: 'Quizzes Taken', value: results.length, icon: BookOpen, color: 'text-indigo-600 bg-indigo-50' },
+            { label: 'Average Score', value: `${avgScore}%`, icon: TrendingUp, color: 'text-amber-600 bg-amber-50' },
+            { label: 'Passed (≥70%)', value: passed, icon: Trophy, color: 'text-emerald-600 bg-emerald-50' },
+            { label: 'AI Sessions', value: aiHistory.length, icon: Brain, color: 'text-purple-600 bg-purple-50' },
+          ].map(stat => (
+            <Card key={stat.label} className="border-slate-200 rounded-2xl shadow-sm">
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', stat.color)}>
+                  <stat.icon className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-2xl font-black text-slate-900">{stat.value}</p>
+                  <p className="text-xs text-slate-500">{stat.label}</p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Charts Row */}
+        {results.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Score Over Time */}
+            <Card className="border-slate-200 rounded-2xl shadow-sm">
+              <CardHeader><CardTitle className="text-sm font-bold">Score Over Time</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={lineData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 11 }} domain={[0, 100]} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }}
+                        formatter={(v: any, _, props) => [
+                          `${v}%`,
+                          props.payload?.lesson || 'Score'
+                        ]}
+                      />
+                      <Line type="monotone" dataKey="score" stroke="#6366f1" strokeWidth={3} dot={{ fill: '#6366f1', r: 4 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Performance Distribution */}
+            <Card className="border-slate-200 rounded-2xl shadow-sm">
+              <CardHeader><CardTitle className="text-sm font-bold">Performance Distribution</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-48 flex items-center">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={3} dataKey="value">
+                        {pieData.map((_, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2 ml-2">
+                    {pieData.map((d, i) => (
+                      <div key={d.name} className="flex items-center gap-1.5 text-xs">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[i] }} />
+                        <span className="text-slate-600">{d.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Skill Radar */}
+            <Card className="border-slate-200 rounded-2xl shadow-sm">
+              <CardHeader><CardTitle className="text-sm font-bold">Skill Analysis</CardTitle></CardHeader>
+              <CardContent>
+                <div className="h-48">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart data={radarData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                      <PolarGrid stroke="#e2e8f0" />
+                      <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11 }} />
+                      <Radar dataKey="score" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} strokeWidth={2} />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* AI Session History */}
+            <Card className="border-slate-200 rounded-2xl shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Brain className="w-4 h-4 text-purple-600" />
+                  AI Conversation Avg Score
+                  {aiHistory.length > 0 && <span className="ml-auto text-purple-600 font-black">{avgAiScore}/100</span>}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {aiHistory.length === 0 ? (
+                  <div className="text-center py-6 text-slate-400 text-sm">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    No AI sessions yet
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 max-h-40 overflow-y-auto">
+                    {aiHistory.slice(0, 5).map(h => (
+                      <div key={h.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-purple-50">
+                        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0',
+                          h.score >= 80 ? 'bg-emerald-100 text-emerald-700' : h.score >= 60 ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+                        )}>
+                          {h.score}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{h.topic}</p>
+                          <p className="text-[10px] text-slate-400">{new Date(h.date).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Achievements */}
+        <Card className="border-slate-200 rounded-2xl shadow-sm">
+          <CardHeader><CardTitle className="text-sm font-bold">Achievements</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {achievements.map(a => (
+                <div key={a.title} className={cn(
+                  'p-4 rounded-2xl border flex items-start gap-3 transition-all',
+                  a.unlocked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-200 opacity-50 grayscale'
+                )}>
+                  <span className="text-2xl">{a.icon}</span>
+                  <div>
+                    <p className="text-xs font-bold text-slate-800">{a.title}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">{a.desc}</p>
+                    {a.unlocked && <span className="text-[10px] font-bold text-amber-600 mt-1 block">✓ Unlocked</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Results Table */}
+        {results.length > 0 && (
+          <Card className="border-slate-200 rounded-2xl shadow-sm">
+            <CardHeader><CardTitle className="text-sm font-bold">All Quiz Results</CardTitle></CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-100">
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Lesson</th>
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Course</th>
+                      <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Correct</th>
+                      <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Score</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-600">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {results.map(r => (
+                      <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-800">{r.lessonName}</td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{r.courseTitle}</td>
+                        <td className="px-4 py-3 text-center text-sm text-slate-600">{r.correct}/{r.totalQuestions}</td>
+                        <td className="px-4 py-3 text-center">{getScoreBadge(r.score)}</td>
+                        <td className="px-4 py-3 text-right text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  // ─── TEACHER VIEW ───────────
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            {role === 'student' ? 'My Test Results' : 'Test Reports & Analytics'}
-          </h1>
-          <p className="text-slate-500 mt-1">
-            {role === 'student'
-              ? 'View your quiz results and scores across all lessons.'
-              : 'Quiz results from your students only.'}
-          </p>
+          <h1 className="text-2xl font-black text-slate-900">Test Reports & Analytics</h1>
+          <p className="text-slate-500 text-sm mt-1">Quiz results from your students only.</p>
         </div>
-        {role !== 'student' && (
-          <button
-            onClick={() => {
-              const csv = ['Student,Lesson,Course,Session,Score,Total Questions,Correct,Date',
-                ...filtered.map(r => `${r.studentName},${r.lessonName},${r.courseTitle},${r.sessionName},${r.score}%,${r.totalQuestions},${r.correct},${new Date(r.submittedAt).toLocaleDateString()}`)
-              ].join('\n');
-              const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = 'test_results.csv'; a.click();
-            }}
-            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <FileDown className="w-4 h-4" /> Export CSV
-          </button>
-        )}
+        <button
+          onClick={() => {
+            const csv = ['Student,Lesson,Course,Session,Score,Total Questions,Correct,Date',
+              ...filtered.map(r => `${r.studentName},${r.lessonName},${r.courseTitle},${r.sessionName},${r.score}%,${r.totalQuestions},${r.correct},${new Date(r.submittedAt).toLocaleDateString()}`)
+            ].join('\n');
+            const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = 'test_results.csv'; a.click();
+          }}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors"
+        >
+          <FileDown className="w-4 h-4" /> Export CSV
+        </button>
       </div>
 
-      {/* Summary Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { label: role === 'student' ? 'Quizzes Taken' : 'Total Tests', value: results.length, icon: BookOpen, color: 'text-primary-600 bg-primary-50' },
-          { label: role === 'student' ? 'Lessons Done' : 'Students Tested', value: role === 'student' ? results.length : uniqueStudents, icon: Users, color: 'text-blue-600 bg-blue-50' },
+          { label: 'Total Tests', value: results.length, icon: BookOpen, color: 'text-indigo-600 bg-indigo-50' },
+          { label: 'Students Tested', value: uniqueStudents, icon: Users, color: 'text-blue-600 bg-blue-50' },
           { label: 'Average Score', value: `${avgScore}%`, icon: TrendingUp, color: 'text-amber-600 bg-amber-50' },
-          { label: 'Passed (≥70%)', value: passed, icon: Trophy, color: 'text-green-600 bg-green-50' },
+          { label: 'Passed (≥70%)', value: passed, icon: Trophy, color: 'text-emerald-600 bg-emerald-50' },
         ].map(stat => (
-          <Card key={stat.label} className="border-slate-200">
-            <CardContent className="p-4 flex items-center gap-4">
+          <Card key={stat.label} className="border-slate-200 rounded-2xl shadow-sm">
+            <CardContent className="p-4 flex items-center gap-3">
               <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', stat.color)}>
                 <stat.icon className="w-5 h-5" />
               </div>
@@ -161,10 +383,9 @@ export default function Reports() {
         ))}
       </div>
 
-      {/* Chart - teacher only */}
-      {role !== 'student' && chartData.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Average Score by Student</CardTitle></CardHeader>
+      {chartData.length > 0 && (
+        <Card className="border-slate-200 rounded-2xl shadow-sm">
+          <CardHeader><CardTitle className="text-sm font-bold">Average Score by Student</CardTitle></CardHeader>
           <CardContent>
             <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
@@ -173,7 +394,7 @@ export default function Reports() {
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} domain={[0, 100]} />
                   <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }} formatter={(v: any) => [`${v}%`, 'Avg Score']} />
-                  <Bar dataKey="avgScore" fill="#3b82f6" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="avgScore" fill="#6366f1" radius={[6, 6, 0, 0]} />
                 </RechartsBarChart>
               </ResponsiveContainer>
             </div>
@@ -181,17 +402,14 @@ export default function Reports() {
         </Card>
       )}
 
-      {/* Results Table */}
-      <Card>
+      <Card className="border-slate-200 rounded-2xl shadow-sm">
         <CardHeader>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <CardTitle>All Test Results</CardTitle>
-            {role !== 'student' && (
-              <div className="flex gap-2 flex-wrap">
-                <input value={filterStudent} onChange={e => setFilterStudent(e.target.value)} placeholder="Filter by student..." className="h-8 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-                <input value={filterCourse} onChange={e => setFilterCourse(e.target.value)} placeholder="Filter by course..." className="h-8 rounded-md border border-slate-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
-              </div>
-            )}
+            <CardTitle className="text-sm font-bold">All Test Results</CardTitle>
+            <div className="flex gap-2 flex-wrap">
+              <input value={filterStudent} onChange={e => setFilterStudent(e.target.value)} placeholder="Filter by student..." className="h-8 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+              <input value={filterCourse} onChange={e => setFilterCourse(e.target.value)} placeholder="Filter by course..." className="h-8 rounded-xl border border-slate-200 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20" />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -200,36 +418,34 @@ export default function Reports() {
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center text-slate-400">
               <Trophy className="w-10 h-10 mx-auto mb-3 text-slate-300" />
-              <p className="text-sm">No test results yet. Results appear here when quizzes are completed.</p>
+              <p className="text-sm">No test results yet.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-slate-50 hover:bg-slate-50">
-                    {role !== 'student' && <TableHead className="font-semibold text-slate-700">Student</TableHead>}
-                    <TableHead className="font-semibold text-slate-700">Lesson</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Course</TableHead>
-                    <TableHead className="font-semibold text-slate-700">Session</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">Correct</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-center">Score</TableHead>
-                    <TableHead className="font-semibold text-slate-700 text-right">Date</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Student</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Lesson</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-600">Course</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Correct</th>
+                    <th className="text-center px-4 py-3 text-xs font-bold text-slate-600">Score</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-600">Date</th>
+                  </tr>
+                </thead>
+                <tbody>
                   {filtered.map(r => (
-                    <TableRow key={r.id} className="hover:bg-slate-50/50">
-                      {role !== 'student' && <TableCell className="font-medium text-slate-900">{r.studentName}</TableCell>}
-                      <TableCell className="text-slate-700">{r.lessonName}</TableCell>
-                      <TableCell><span className="text-xs text-slate-500">{r.courseTitle}</span>{r.className && <span className="ml-1 text-xs text-slate-400">· {r.className}</span>}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{r.sessionName}</TableCell>
-                      <TableCell className="text-center text-sm text-slate-600">{r.correct} / {r.totalQuestions}</TableCell>
-                      <TableCell className="text-center">{getScoreBadge(r.score)}</TableCell>
-                      <TableCell className="text-right text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</TableCell>
-                    </TableRow>
+                    <tr key={r.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                      <td className="px-4 py-3 text-sm font-bold text-slate-800">{r.studentName}</td>
+                      <td className="px-4 py-3 text-sm text-slate-700">{r.lessonName}</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{r.courseTitle}</td>
+                      <td className="px-4 py-3 text-center text-sm text-slate-600">{r.correct}/{r.totalQuestions}</td>
+                      <td className="px-4 py-3 text-center">{getScoreBadge(r.score)}</td>
+                      <td className="px-4 py-3 text-right text-xs text-slate-400">{new Date(r.submittedAt).toLocaleDateString()}</td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
+                </tbody>
+              </table>
             </div>
           )}
         </CardContent>

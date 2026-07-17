@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../components/ui/Table';
-import { Search, Plus, Filter, FileText, PlayCircle, Pause, Square, Maximize, Trash2, Video, FileCode, CheckCircle, BookOpen, User, ClipboardList, Hand, ChevronDown, ChevronRight, Lock, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, Filter, FileText, PlayCircle, Pause, Square, Maximize, Trash2, Video, FileCode, CheckCircle, BookOpen, User, ClipboardList, Hand, ChevronDown, ChevronRight, Lock, CheckCircle2, Save } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, database } from '../lib/firebase';
 import { ref, onValue, set, push, remove } from 'firebase/database';
@@ -447,6 +447,39 @@ export default function Assessments() {
       await set(ref(database, 'users/' + studentId + '/handRaised'), newVal);
     };
 
+    const handleSaveCourse = async (courseTitle: string, lessons: any[]) => {
+      const studentId = auth.currentUser?.uid;
+      if (!studentId) return;
+      try {
+        const safeKey = courseTitle.replace(/[.#$\[\]]/g, '_');
+        await set(ref(database, `users/${studentId}/savedCourses/${safeKey}`), {
+          title: courseTitle,
+          savedAt: new Date().toISOString(),
+          className: lessons[0]?.className || '',
+          semester: lessons[0]?.semester || '',
+          lessons: lessons.reduce((acc, l) => {
+            acc[l.id] = {
+              id: l.id,
+              name: l.name,
+              type: l.type,
+              content: l.content || '',
+              resourceUrl: l.resourceUrl || '',
+              fileName: l.fileName || '',
+              test: l.test || null,
+              status: l.status || 'Pending',
+              testScore: l.testScore !== undefined ? l.testScore : null,
+              sessionName: l.sessionName || 'General',
+            };
+            return acc;
+          }, {} as Record<string, any>)
+        });
+        showToast(`Course "${courseTitle}" saved to My Courses successfully!`, 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Failed to save course.', 'error');
+      }
+    };
+
     const toggleUnit = (key: string) => {
       setCollapsedUnits(prev => {
         const next = new Set(prev);
@@ -493,8 +526,18 @@ export default function Assessments() {
               Object.entries(byCourse).map(([courseTitle, units]) => (
                 <div key={courseTitle} className="mb-1">
                   {/* Course header */}
-                  <div className="px-4 py-2 bg-indigo-50 border-y border-indigo-100">
-                    <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">{courseTitle}</p>
+                  <div className="px-4 py-2 bg-indigo-50 border-y border-indigo-100 flex items-center justify-between gap-2">
+                    <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider truncate">{courseTitle}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const courseLessons = Object.values(units).flat();
+                        handleSaveCourse(courseTitle, courseLessons);
+                      }}
+                      className="flex items-center gap-1 text-[9px] font-black text-indigo-600 bg-white border border-indigo-200 px-2 py-1 rounded shadow-sm hover:bg-indigo-50 transition-all cursor-pointer flex-shrink-0"
+                    >
+                      <Save className="w-2.5 h-2.5" /> Save
+                    </button>
                   </div>
                   {/* Units */}
                   {Object.entries(units).map(([unitName, lessons]) => {
@@ -597,21 +640,25 @@ export default function Assessments() {
             </div>
 
             {!quizMode ? (
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                {/* VIDEO / CONTENT AREA — takes remaining space, never overlaps the banner below */}
-                <div className="flex-1 min-h-0 bg-black overflow-hidden relative flex items-center justify-center">
-                  {activeLesson.resourceUrl ? (
-                    renderMedia(activeLesson.resourceUrl, activeLesson.type)
-                  ) : activeLesson.content ? (
-                    <div className="absolute inset-0 overflow-y-auto">
-                      <div className="max-w-2xl mx-auto p-10 text-slate-100 text-base leading-relaxed" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#0d1117]">
+                {/* VIDEO / CONTENT AREA — stacked configuration, no overlap */}
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
+                  {activeLesson.resourceUrl && (
+                    <div className="h-64 sm:h-80 md:h-[400px] w-full bg-black flex-shrink-0 relative flex items-center justify-center">
+                      {renderMedia(activeLesson.resourceUrl, activeLesson.type)}
                     </div>
-                  ) : (
-                    <div className="text-slate-600 text-sm">No content available.</div>
                   )}
+                  {activeLesson.content ? (
+                    <div className="flex-1 overflow-y-auto border-t border-[#30363d] bg-[#0d1117]">
+                      <div className="max-w-2xl mx-auto p-8 text-slate-100 text-lg md:text-xl font-medium leading-relaxed whitespace-pre-wrap select-text" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
+                    </div>
+                  ) : !activeLesson.resourceUrl ? (
+                    <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">No content available.</div>
+                  ) : null}
+
                   {/* Info Overlay */}
                   <div className={cn(
-                    'absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-col justify-end p-6 transition-all duration-500 pointer-events-none',
+                    'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-end p-6 transition-all duration-500 pointer-events-none z-10',
                     showInfoOverlay ? 'opacity-100' : 'opacity-0'
                   )}>
                     <span className="text-xs text-amber-400 font-bold uppercase tracking-widest mb-1">{activeLesson.type}</span>
