@@ -489,7 +489,7 @@ export default function Assessments() {
     };
 
     return (
-      <div className="flex gap-0 h-[calc(100vh-5rem)] -m-6 overflow-hidden">
+      <div className="flex gap-0 h-[calc(100vh-5rem)] -mx-4 -mt-4 md:-m-6 overflow-hidden">
         {/* LEFT SIDEBAR - Course / Unit / Lesson Navigator */}
         <div className={cn(
           "flex-shrink-0 border-r border-slate-200 bg-white flex flex-col overflow-hidden transition-all duration-200",
@@ -498,8 +498,8 @@ export default function Assessments() {
           {/* Sidebar header */}
           <div className="sticky top-0 z-10 bg-white border-b border-slate-100 px-4 py-3 flex items-center justify-between gap-2">
             <div>
-              <h1 className="text-base font-bold text-slate-900">My Learning</h1>
-              <p className="text-[11px] text-slate-500">{myAssignments.length} lessons assigned</p>
+              <h1 className="text-lg font-bold text-slate-900">My Learning</h1>
+              <p className="text-xs text-slate-500">{myAssignments.length} lessons assigned</p>
             </div>
             <button
               onClick={handleHandToggle}
@@ -527,7 +527,7 @@ export default function Assessments() {
                 <div key={courseTitle} className="mb-1">
                   {/* Course header */}
                   <div className="px-4 py-2 bg-indigo-50 border-y border-indigo-100 flex items-center justify-between gap-2">
-                    <p className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider truncate">{courseTitle}</p>
+                    <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider truncate">{courseTitle}</p>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -554,13 +554,13 @@ export default function Assessments() {
                         >
                           <div className="flex items-center gap-2 min-w-0">
                             {isCollapsed ? <ChevronRight className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />}
-                            <span className="text-xs font-bold text-slate-700 truncate">{unitName}</span>
+                            <span className="text-sm font-bold text-slate-700 truncate">{unitName}</span>
                           </div>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
-                            <div className="w-12 bg-slate-200 rounded-full h-1">
-                              <div className="bg-primary-500 h-1 rounded-full" style={{ width: `${unitPct}%` }} />
+                            <div className="w-14 bg-slate-200 rounded-full h-1.5">
+                              <div className="bg-primary-500 h-1.5 rounded-full" style={{ width: `${unitPct}%` }} />
                             </div>
-                            <span className="text-[10px] text-slate-400">{unitDone}/{lessons.length}</span>
+                            <span className="text-xs text-slate-400">{unitDone}/{lessons.length}</span>
                           </div>
                         </button>
                         {/* Lessons inside unit */}
@@ -582,12 +582,12 @@ export default function Assessments() {
                                 : <BookOpen className="w-3 h-3" />}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className={cn("text-xs font-semibold truncate", activeLesson?.id === a.id ? 'text-primary-700' : 'text-slate-800')}>{a.name}</p>
+                              <p className={cn("text-sm font-semibold leading-snug", activeLesson?.id === a.id ? 'text-primary-700' : 'text-slate-800')}>{a.name}</p>
                               {a.testScore !== undefined && (
-                                <span className="inline-block text-[10px] font-bold text-green-700 bg-green-50 px-1 py-0.5 rounded mt-0.5">{a.testScore}%</span>
+                                <span className="inline-block text-xs font-bold text-green-700 bg-green-50 px-1.5 py-0.5 rounded mt-1">{a.testScore}%</span>
                               )}
                             </div>
-                            {a.test && <span className="text-[9px] bg-amber-50 text-amber-600 border border-amber-200 px-1 py-0.5 rounded font-bold flex-shrink-0">Quiz</span>}
+                            {a.test && <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-1 rounded font-bold flex-shrink-0">Quiz</span>}
                           </button>
                         ))}
                       </div>

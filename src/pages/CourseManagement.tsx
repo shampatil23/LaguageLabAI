@@ -22,10 +22,31 @@ const mockCourses = [
 
 export default function CourseManagement() {
   const role = localStorage.getItem('userRole') || 'teacher';
-  const [view, setView] = useState<'list' | 'create_lesson' | 'create_course'>(role === 'teacher' ? 'create_course' : 'list');
+  // Start teacher on list view to show their created courses
+  const [view, setView] = useState<'list' | 'create_lesson' | 'create_course'>('list');
   const [savedCourses, setSavedCourses] = useState<any[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<any | null>(null);
   const [activeLesson, setActiveLesson] = useState<any | null>(null);
+
+  // Teacher course builder states
+  const [courses, setCourses] = useState<any[]>([]);
+  const [teacherStudents, setTeacherStudents] = useState<any[]>([]);
+  const [assigningCourse, setAssigningCourse] = useState<any | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Form states for Course Creator
+  const [courseTitle, setCourseTitle] = useState('');
+  const [courseCode, setCourseCode] = useState('');
+  const [courseContent, setCourseContent] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [driveUrl, setDriveUrl] = useState('');
+
+  // Form states for Lesson Studio
+  const [targetCourseId, setTargetCourseId] = useState('');
+  const [lessonName, setLessonName] = useState('');
+  const [lessonType, setLessonType] = useState('Video');
+  const [lessonUnit, setLessonUnit] = useState('Unit 1');
 
   // Lesson player states
   const [quizMode, setQuizMode] = useState(false);
@@ -37,21 +58,54 @@ export default function CourseManagement() {
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (role !== 'student') return;
     const unsubAuth = auth.onAuthStateChanged(user => {
       if (!user) return;
-      onValue(ref(database, `users/${user.uid}/savedCourses`), snap => {
-        if (snap.exists()) {
-          const list = Object.entries(snap.val()).map(([key, val]: [string, any]) => ({
-            key,
-            ...val,
-            lessons: val.lessons ? Object.values(val.lessons) : []
-          }));
-          setSavedCourses(list);
-        } else {
-          setSavedCourses([]);
-        }
-      });
+
+      if (role === 'student') {
+        const queryRef = ref(database, `users/${user.uid}/savedCourses`);
+        return onValue(queryRef, snap => {
+          if (snap.exists()) {
+            const list = Object.entries(snap.val()).map(([key, val]: [string, any]) => ({
+              key,
+              ...val,
+              lessons: val.lessons ? Object.values(val.lessons) : []
+            }));
+            setSavedCourses(list);
+          } else {
+            setSavedCourses([]);
+          }
+        });
+      } else if (role === 'teacher') {
+        // Fetch courses created by this teacher
+        const coursesRef = ref(database, 'courses');
+        const unsubCourses = onValue(coursesRef, snap => {
+          if (snap.exists()) {
+            const list = Object.entries(snap.val())
+              .map(([id, val]: [string, any]) => ({ id, ...val }))
+              .filter(c => c.createdBy === user.uid);
+            setCourses(list);
+          } else {
+            setCourses([]);
+          }
+        });
+
+        // Fetch students of this teacher
+        const usersRef = ref(database, 'users');
+        const unsubStudents = onValue(usersRef, snap => {
+          if (snap.exists()) {
+            const allUsers = Object.entries(snap.val()).map(([id, val]: [string, any]) => ({ id, ...val }));
+            const list = allUsers.filter(u => u.role === 'student' && u.teacherId === user.uid);
+            setTeacherStudents(list);
+          } else {
+            setTeacherStudents([]);
+          }
+        });
+
+        return () => {
+          unsubCourses();
+          unsubStudents();
+        };
+      }
     });
     return () => unsubAuth();
   }, [role]);
@@ -138,12 +192,157 @@ export default function CourseManagement() {
     if (!url) return <div className="flex items-center justify-center h-full text-slate-400 text-sm">No video resource.</div>;
     if (type === 'Video') {
       const ytId = getYoutubeIdS(url);
-      if (ytId) return <iframe className="w-full h-full rounded-none" src={`https://www.youtube.com/embed/${ytId}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
+      if (ytId) return <iframe className="w-full h-full rounded-none border-0" src={`https://www.youtube.com/embed/${ytId}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
       const driveId = getDriveIdS(url);
-      if (driveId) return <iframe className="w-full h-full" src={`https://drive.google.com/file/d/${driveId}/preview`} allow="autoplay" />;
+      if (driveId) return <iframe className="w-full h-full border-0" src={`https://drive.google.com/file/d/${driveId}/preview`} allow="autoplay" />;
       return <video src={url} controls className="w-full h-full" />;
     }
-    return <iframe src={url} className="w-full h-full" title="Lesson Content" />;
+    return <iframe src={url} className="w-full h-full border-0" title="Lesson Content" />;
+  };
+
+  const handlePublishCourse = async (status: 'Active' | 'Draft') => {
+    const user = auth.currentUser;
+    if (!user) return alert('Not authenticated.');
+    if (!courseTitle.trim()) return alert('Please enter a course title.');
+
+    setLoading(true);
+    try {
+      const courseId = push(ref(database, 'courses')).key || Date.now().toString();
+      const newCourseObj = {
+        id: courseId,
+        title: courseTitle.trim(),
+        code: courseCode.trim() || 'ENG101',
+        content: courseContent.trim(),
+        youtubeUrl: youtubeUrl.trim(),
+        driveUrl: driveUrl.trim(),
+        createdBy: user.uid,
+        status,
+        createdAt: new Date().toISOString()
+      };
+
+      await set(ref(database, `courses/${courseId}`), newCourseObj);
+      alert(status === 'Active' ? 'Course published successfully!' : 'Course draft saved successfully!');
+
+      // Reset form
+      setCourseTitle('');
+      setCourseCode('');
+      setCourseContent('');
+      setYoutubeUrl('');
+      setDriveUrl('');
+      setView('list');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save course.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePublishLesson = async () => {
+    const user = auth.currentUser;
+    if (!user) return alert('Not authenticated.');
+    if (!targetCourseId) return alert('Please select a course.');
+    if (!lessonName.trim()) return alert('Please enter a lesson title.');
+
+    setLoading(true);
+    try {
+      const lessonId = push(ref(database, `courses/${targetCourseId}/lessons`)).key || Date.now().toString();
+      const newLessonObj = {
+        id: lessonId,
+        name: lessonName.trim(),
+        type: lessonType,
+        sessionName: lessonUnit.trim() || 'Unit 1',
+        resourceUrl: youtubeUrl.trim() || driveUrl.trim() || '',
+        content: courseContent.trim(),
+        createdAt: new Date().toISOString()
+      };
+
+      await set(ref(database, `courses/${targetCourseId}/lessons/${lessonId}`), newLessonObj);
+      alert('Lesson added to course successfully!');
+
+      // Reset form
+      setLessonName('');
+      setLessonUnit('Unit 1');
+      setCourseContent('');
+      setYoutubeUrl('');
+      setDriveUrl('');
+      setView('list');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to save lesson.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAssignCourse = async () => {
+    if (!assigningCourse || selectedStudentIds.length === 0) return;
+    setLoading(true);
+    try {
+      const courseObj = courses.find(c => c.id === assigningCourse.id);
+      if (!courseObj) return;
+
+      const lessonsData: Record<string, any> = {};
+
+      // Default first main lesson from the course overview
+      lessonsData[courseObj.id] = {
+        id: courseObj.id,
+        name: 'Introduction',
+        type: courseObj.youtubeUrl || courseObj.driveUrl ? 'Video' : 'HTML',
+        resourceUrl: courseObj.youtubeUrl || courseObj.driveUrl || '',
+        content: courseObj.content || '',
+        sessionName: 'Overview',
+        status: 'Not Started'
+      };
+
+      // Add sub-lessons if exists
+      if (courseObj.lessons) {
+        Object.entries(courseObj.lessons).forEach(([lesId, lesVal]: [string, any]) => {
+          lessonsData[lesId] = {
+            id: lesId,
+            name: lesVal.name,
+            type: lesVal.type || 'HTML',
+            resourceUrl: lesVal.resourceUrl || '',
+            content: lesVal.content || '',
+            sessionName: lesVal.sessionName || 'Lessons',
+            status: 'Not Started',
+            test: lesVal.test || null
+          };
+        });
+      }
+
+      const promises = selectedStudentIds.map(sid => {
+        return set(ref(database, `users/${sid}/savedCourses/${courseObj.id}`), {
+          title: courseObj.title,
+          code: courseObj.code,
+          className: 'Assigned Course',
+          semester: 'Self-paced',
+          savedAt: new Date().toISOString(),
+          lessons: lessonsData
+        });
+      });
+
+      await Promise.all(promises);
+      alert('Course successfully assigned list to students!');
+      setAssigningCourse(null);
+      setSelectedStudentIds([]);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to assign course.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteCourse = async (courseId: string) => {
+    if (!confirm('Are you sure you want to delete this course?')) return;
+    try {
+      await set(ref(database, `courses/${courseId}`), null);
+      alert('Course deleted successfully.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete course.');
+    }
   };
 
   // ─── STUDENT VIEW ─────────────────────────────────────────────────────────
@@ -217,7 +416,7 @@ export default function CourseManagement() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className={cn("text-xs font-semibold truncate", activeLesson?.id === l.id ? 'text-indigo-700 font-bold' : 'text-slate-850')}>{l.name}</p>
-                          {l.testScore !== undefined && l.testScore !== null && (
+                          {l.testScore !== undefined && l.testScore !== null && l.testScore > 0 && (
                             <span className="inline-block text-[9px] font-bold text-green-700 bg-green-50 px-1 py-0.2 rounded mt-0.5">Quiz: {l.testScore}%</span>
                           )}
                         </div>
@@ -291,7 +490,7 @@ export default function CourseManagement() {
                         <div>
                           <p className="text-white text-sm font-bold">Lesson Completed!</p>
                           <p className="text-slate-500 text-xs">
-                            {activeLesson.testScore !== undefined && activeLesson.testScore !== null
+                            {activeLesson.testScore !== undefined && activeLesson.testScore !== null && activeLesson.testScore > 0
                               ? `Quiz score: ${activeLesson.testScore}%`
                               : activeLesson.test ? 'A quiz is available — take it below.' : 'No quiz for this lesson.'}
                           </p>
@@ -470,12 +669,24 @@ export default function CourseManagement() {
             </button>
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">{view === 'create_course' ? 'Course Builder' : 'Lesson Studio'}</h1>
-              <p className="text-slate-500 mt-1">{view === 'create_course' ? 'Set up course details and record multimedia content.' : 'Record media and create interactive lesson content.'}</p>
+              <p className="text-slate-500 mt-1">{view === 'create_course' ? 'Set up course details and provide YouTube or Google Drive video links.' : 'Add video link and create interactive lesson content.'}</p>
             </div>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" className="bg-white"><Save className="w-4 h-4 mr-2" />Save Draft</Button>
-            <Button>Publish {view === 'create_course' ? 'Course' : 'Lesson'}</Button>
+            {view === 'create_course' ? (
+              <>
+                <Button variant="outline" onClick={() => handlePublishCourse('Draft')} disabled={loading} className="bg-white">
+                  <Save className="w-4 h-4 mr-2" />Save Draft
+                </Button>
+                <Button onClick={() => handlePublishCourse('Active')} disabled={loading}>
+                  Publish Course
+                </Button>
+              </>
+            ) : (
+              <Button onClick={handlePublishLesson} disabled={loading}>
+                Publish Lesson
+              </Button>
+            )}
           </div>
         </div>
 
@@ -483,36 +694,53 @@ export default function CourseManagement() {
           <div className="lg:col-span-4 flex flex-col gap-6">
             <Card className="flex flex-col flex-1 shadow-sm border-slate-200 overflow-hidden min-h-0">
               <CardHeader className="bg-slate-50 border-b border-slate-100 py-3 shrink-0">
-                <CardTitle className="text-sm">Media Recording & Preview</CardTitle>
+                <CardTitle className="text-sm">Media resource & Links</CardTitle>
               </CardHeader>
               <CardContent className="p-4 flex flex-col flex-1 gap-4 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-3 shrink-0">
-                  <Button variant="outline" className="h-16 flex flex-col gap-1 items-center justify-center bg-slate-50 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-200">
-                    <Video className="w-5 h-5" /><span className="text-xs">Video & Audio</span>
-                  </Button>
-                  <Button variant="outline" className="h-16 flex flex-col gap-1 items-center justify-center bg-slate-50 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-200">
-                    <Mic className="w-5 h-5" /><span className="text-xs">Audio Only</span>
-                  </Button>
-                  <Button variant="outline" className="col-span-2 h-12 flex items-center justify-center gap-2 bg-slate-50 hover:bg-primary-50 hover:text-primary-600 hover:border-primary-200">
-                    <Monitor className="w-4 h-4" /> Screen Capture
-                  </Button>
-                </div>
-                <div className="flex-1 bg-slate-900 rounded-lg relative overflow-hidden flex items-center justify-center mt-2 border border-slate-200 min-h-[200px]">
-                  <div className="text-slate-500 flex flex-col items-center gap-2">
-                    <Video className="w-8 h-8 opacity-20" />
-                    <span className="text-xs opacity-50 font-medium">Camera Offline</span>
+                <div className="space-y-4 shrink-0">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase">YouTube Link</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        value={youtubeUrl}
+                        onChange={(e) => {
+                          setYoutubeUrl(e.target.value);
+                          if (e.target.value) setDriveUrl('');
+                        }}
+                        className="w-full h-10 px-3 pl-9 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-700 bg-white"
+                      />
+                      <Video className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    </div>
                   </div>
-                  <div className="absolute top-2 right-2 flex gap-2">
-                    <span className="bg-black/50 text-white text-[10px] px-2 py-1 rounded backdrop-blur-sm font-mono">00:00:00</span>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Google Drive Link</label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        placeholder="https://drive.google.com/file/d/.../preview"
+                        value={driveUrl}
+                        onChange={(e) => {
+                          setDriveUrl(e.target.value);
+                          if (e.target.value) setYoutubeUrl('');
+                        }}
+                        className="w-full h-10 px-3 pl-9 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-700 bg-white"
+                      />
+                      <Link className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
+                    </div>
                   </div>
                 </div>
-                <div className="flex items-center justify-center gap-4 bg-slate-100 p-2 rounded-lg shrink-0">
-                  <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-primary-600 shadow-sm hover:bg-primary-50 transition-colors">
-                    <Play className="w-5 h-5 ml-1" />
-                  </button>
-                  <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center text-error-600 shadow-sm hover:bg-error-50 transition-colors">
-                    <Square className="w-4 h-4" />
-                  </button>
+
+                <div className="flex-1 bg-slate-900 rounded-lg relative overflow-hidden flex items-center justify-center mt-2 border border-slate-200 min-h-[220px]">
+                  {(youtubeUrl || driveUrl) ? (
+                    renderMedia(youtubeUrl || driveUrl, 'Video')
+                  ) : (
+                    <div className="text-slate-500 flex flex-col items-center gap-2 select-none">
+                      <Video className="w-8 h-8 opacity-20" />
+                      <span className="text-xs opacity-50 font-medium">No YouTube or Drive video preview</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -540,16 +768,72 @@ export default function CourseManagement() {
                   <Button variant="outline" size="sm" className="h-8 text-xs bg-white"><LayoutTemplate className="w-3 h-3 mr-1" />Templates</Button>
                 </div>
               </div>
-              <div className="p-4 border-b border-slate-100 bg-white shrink-0">
-                <input type="text" placeholder={view === 'create_course' ? "Course Title..." : "Lesson Title..."} className="w-full text-2xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none" />
-                {view === 'create_course' && (
-                  <input type="text" placeholder="Course Code (e.g. ENG101)" className="mt-2 w-full text-sm font-medium text-slate-500 placeholder:text-slate-300 focus:outline-none" />
+
+              <div className="p-4 border-b border-slate-100 bg-white shrink-0 space-y-3">
+                {view === 'create_course' ? (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Course Title..."
+                      value={courseTitle}
+                      onChange={(e) => setCourseTitle(e.target.value)}
+                      className="w-full text-2xl font-semibold text-slate-900 placeholder:text-slate-300 focus:outline-none bg-white"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Course Code (e.g. ENG101)"
+                      value={courseCode}
+                      onChange={(e) => setCourseCode(e.target.value)}
+                      className="w-full text-sm font-medium text-slate-500 placeholder:text-slate-300 focus:outline-none bg-white"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <select
+                      value={targetCourseId}
+                      onChange={(e) => setTargetCourseId(e.target.value)}
+                      className="w-full h-10 px-3 text-sm rounded-lg border border-slate-200 focus:outline-none bg-white font-medium text-slate-700"
+                    >
+                      <option value="">-- Choose Course for Lesson --</option>
+                      {courses.map(c => (
+                        <option key={c.id} value={c.id}>{c.title} ({c.code})</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="Lesson Title..."
+                      value={lessonName}
+                      onChange={(e) => setLessonName(e.target.value)}
+                      className="w-full text-2xl font-bold text-slate-900 placeholder:text-slate-300 focus:outline-none bg-white"
+                    />
+                    <div className="flex gap-4 items-center">
+                      <input
+                        type="text"
+                        placeholder="Unit Name (e.g. Unit 1: Introduction)"
+                        value={lessonUnit}
+                        onChange={(e) => setLessonUnit(e.target.value)}
+                        className="flex-1 text-sm font-medium text-slate-500 placeholder:text-slate-300 focus:outline-none bg-white"
+                      />
+                      <select
+                        value={lessonType}
+                        onChange={(e) => setLessonType(e.target.value)}
+                        className="h-8 px-2 text-xs rounded-lg border border-slate-200 focus:outline-none bg-white text-slate-650"
+                      >
+                        <option value="Video">Video Lesson</option>
+                        <option value="HTML">Text/HTML Lesson</option>
+                      </select>
+                    </div>
+                  </>
                 )}
               </div>
+
               <div className="flex-1 bg-white p-6 overflow-y-auto">
-                <div className="max-w-3xl mx-auto min-h-full outline-none text-slate-700 leading-relaxed" contentEditable={true} suppressContentEditableWarning={true}>
-                  <p className="text-slate-400">Start typing your {view === 'create_course' ? 'course description and initial' : 'lesson'} content here...</p>
-                </div>
+                <textarea
+                  value={courseContent}
+                  onChange={(e) => setCourseContent(e.target.value)}
+                  placeholder="Start typing your course information or lesson content here..."
+                  className="w-full h-full min-h-[320px] text-slate-700 placeholder:text-slate-350 focus:outline-none resize-none border-none p-0 text-base leading-relaxed font-sans"
+                />
               </div>
             </Card>
           </div>
@@ -558,7 +842,7 @@ export default function CourseManagement() {
     );
   }
 
-  // Teacher list view
+  // Teacher main list view
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -567,7 +851,7 @@ export default function CourseManagement() {
           <p className="text-slate-500 mt-1">Create, organize, and assign curriculum contents.</p>
         </div>
         <div className="flex gap-3">
-          <Button variant="outline" onClick={() => setView('create_course')}>
+          <Button variant="outline" onClick={() => setView('create_course')} className="bg-white">
             <Plus className="w-4 h-4 mr-2" /> Create Course
           </Button>
           <Button onClick={() => setView('create_lesson')}>
@@ -576,32 +860,134 @@ export default function CourseManagement() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {mockCourses.map(course => (
-          <Card key={course.id} className="hover:shadow-md transition-shadow cursor-pointer group">
-            <CardContent className="p-5 flex flex-col h-full">
-              <div className="flex justify-between items-start mb-4">
-                <div className="w-10 h-10 rounded-lg bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
-                  {course.code.substring(0, 3)}
+      {courses.length === 0 ? (
+        <Card className="border-slate-200 shadow-sm rounded-2xl bg-white">
+          <CardContent className="py-20 text-center space-y-4">
+            <div className="w-16 h-16 bg-slate-50 text-slate-300 border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center mx-auto">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <div>
+              <p className="text-slate-650 font-bold">No courses created yet</p>
+              <p className="text-slate-450 text-xs mt-1 max-w-sm mx-auto">
+                Create a course to write custom lesson templates and assign them to your students list.
+              </p>
+            </div>
+            <Button onClick={() => setView('create_course')} className="bg-primary-600 hover:bg-primary-700 text-white text-xs font-bold py-2 rounded-xl">
+              Create a Course
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {courses.map(course => (
+            <Card key={course.id} className="hover:shadow-md transition-shadow cursor-pointer group flex flex-col h-full bg-white border-slate-200">
+              <CardContent className="p-5 flex flex-col h-full">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="w-10 h-10 rounded-lg bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-sm">
+                    {course.code.substring(0, 3)}
+                  </div>
+                  <button onClick={() => handleDeleteCourse(course.id)} className="text-slate-400 hover:text-red-500 p-1.5 rounded-lg transition-colors">
+                    <Square className="w-4 h-4" />
+                  </button>
                 </div>
-                <button className="text-slate-400 hover:text-slate-700"><MoreVertical className="w-5 h-5" /></button>
-              </div>
-              <h3 className="font-semibold text-slate-900 text-lg leading-tight mb-1 group-hover:text-primary-600 transition-colors">{course.name}</h3>
-              <p className="text-sm text-slate-500 mb-4">{course.code}</p>
-              <div className="flex items-center justify-between mt-auto">
-                <div className="flex gap-4 text-sm text-slate-600">
-                  <span className="flex items-center gap-1.5"><Folder className="w-4 h-4" /> {course.modules}</span>
-                  <span className="flex items-center gap-1.5"><Users className="w-4 h-4" /> {course.students}</span>
+                <h3 className="font-semibold text-slate-900 text-lg leading-tight mb-1 group-hover:text-primary-600 transition-colors truncate">{course.title}</h3>
+                <p className="text-sm text-slate-500 mb-4 font-mono">{course.code}</p>
+
+                <div className="flex items-center justify-between mt-auto">
+                  <div className="flex gap-4 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="flex items-center gap-1.5"><Folder className="w-4 h-4 text-primary-500" /> {course.lessons ? Object.keys(course.lessons).length : 0} lesson{(!course.lessons || Object.keys(course.lessons).length !== 1) ? 's' : ''}</span>
+                  </div>
+                  <Badge variant={course.status === 'Active' ? 'success' : 'warning'}>{course.status}</Badge>
                 </div>
-                <Badge variant={course.status === 'Active' ? 'success' : 'warning'}>{course.status}</Badge>
-              </div>
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <Button variant="outline" className="w-full">Manage Course</Button>
+
+                <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+                  <Button
+                    onClick={() => { setAssigningCourse(course); setSelectedStudentIds([]); }}
+                    className="w-full text-xs font-bold h-9 bg-primary-600 text-white hover:bg-primary-700"
+                  >
+                    <Users className="w-4 h-4 mr-2" /> Assign Course
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Assign Student Modal with responsive scroll */}
+      {assigningCourse && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full bg-white shadow-2xl rounded-2xl border border-slate-100 overflow-hidden">
+            <CardHeader className="bg-slate-50 border-b border-slate-100 p-5">
+              <CardTitle className="text-base font-bold text-slate-800">Assign Course: {assigningCourse.title}</CardTitle>
+              <p className="text-xs text-slate-500 mt-1">Select students to assign this course for lifetime access.</p>
+            </CardHeader>
+            <CardContent className="p-5 space-y-4">
+              {teacherStudents.length === 0 ? (
+                <p className="text-xs text-slate-500 text-center py-4 bg-slate-50 rounded-xl">No students assigned to you yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Select All option */}
+                  <label className="flex items-center gap-3 p-3 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 cursor-pointer transition-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudentIds.length === teacherStudents.length && teacherStudents.length > 0}
+                      ref={el => {
+                        if (el) el.indeterminate = selectedStudentIds.length > 0 && selectedStudentIds.length < teacherStudents.length;
+                      }}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStudentIds(teacherStudents.map(s => s.id));
+                        } else {
+                          setSelectedStudentIds([]);
+                        }
+                      }}
+                      className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-indigo-800">Select All Students</p>
+                      <p className="text-[10px] text-indigo-600">{teacherStudents.length} students in your class</p>
+                    </div>
+                  </label>
+                  <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
+                    {teacherStudents.map(student => (
+                      <label key={student.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer transition-all">
+                        <input
+                          type="checkbox"
+                          checked={selectedStudentIds.includes(student.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedStudentIds(prev => [...prev, student.id]);
+                            } else {
+                              setSelectedStudentIds(prev => prev.filter(id => id !== student.id));
+                            }
+                          }}
+                          className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500 bg-white"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-slate-800 truncate">{student.name}</p>
+                          <p className="text-[10px] text-slate-500 truncate font-mono">{student.email}</p>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
+                <Button variant="outline" onClick={() => setAssigningCourse(null)}>Cancel</Button>
+                <Button
+                  onClick={handleAssignCourse}
+                  disabled={loading || selectedStudentIds.length === 0}
+                  className="bg-primary-600 hover:bg-primary-700 text-white font-bold h-9 text-xs"
+                >
+                  {loading ? 'Assigning...' : `Assign to ${selectedStudentIds.length} Student${selectedStudentIds.length !== 1 ? 's' : ''}`}
+                </Button>
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

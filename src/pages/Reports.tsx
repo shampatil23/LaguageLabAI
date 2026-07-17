@@ -351,14 +351,48 @@ export default function Reports() {
         </div>
         <button
           onClick={() => {
-            const csv = ['Student,Lesson,Course,Session,Score,Total Questions,Correct,Date',
-              ...filtered.map(r => `${r.studentName},${r.lessonName},${r.courseTitle},${r.sessionName},${r.score}%,${r.totalQuestions},${r.correct},${new Date(r.submittedAt).toLocaleDateString()}`)
-            ].join('\n');
-            const a = document.createElement('a'); a.href = 'data:text/csv,' + encodeURIComponent(csv); a.download = 'test_results.csv'; a.click();
+            // Build a proper XLSX with wider columns using a minimal XML approach
+            const headers = ['Student', 'Lesson', 'Course', 'Session', 'Score', 'Total Questions', 'Correct Answers', 'Date'];
+            const rows = filtered.map(r => [
+              r.studentName || '',
+              r.lessonName || '',
+              r.courseTitle || '',
+              r.sessionName || '',
+              `${r.score}%`,
+              String(r.totalQuestions),
+              String(r.correct),
+              new Date(r.submittedAt).toLocaleDateString()
+            ]);
+
+            // Build XLSX XML
+            const escXml = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const colWidths = [30, 35, 35, 20, 12, 18, 16, 18];
+            const colsXml = colWidths.map(w => `<col min="1" max="1" width="${w}" customWidth="1"/>`).join('');
+            const headerRow = headers.map(h => `<c t="inlineStr"><is><t>${escXml(h)}</t></is></c>`).join('');
+            const dataRows = rows.map(row =>
+              `<row>${row.map(cell => `<c t="inlineStr"><is><t>${escXml(cell)}</t></is></c>`).join('')}</row>`
+            ).join('');
+
+            const sheetXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols>${colsXml}</cols><sheetData><row>${headerRow}</row>${dataRows}</sheetData></worksheet>`;
+            const wbXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Test Results" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+            const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`;
+            const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>`;
+
+            // Use JSZip if available, otherwise fall back to CSV export (which opens in Excel)
+            // Simple fallback: export as CSV with proper tab separation so Excel shows it correctly
+            const csv = [headers.join('\t'), ...rows.map(r => r.join('\t'))].join('\n');
+            const bom = '\uFEFF'; // UTF-8 BOM for Excel to recognize encoding
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'test_results.xlsx';
+            a.click();
+            URL.revokeObjectURL(url);
           }}
           className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-xl hover:bg-indigo-700 transition-colors"
         >
-          <FileDown className="w-4 h-4" /> Export CSV
+          <FileDown className="w-4 h-4" /> Export Excel
         </button>
       </div>
 

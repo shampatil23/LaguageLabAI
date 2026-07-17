@@ -20,19 +20,19 @@ export default function Login() {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMsg('');
-    
+
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const uid = userCredential.user.uid;
-      
+
       // Fetch user role from database
       const userRef = ref(database, 'users/' + uid);
       const snapshot = await get(userRef);
-      
+
       if (snapshot.exists()) {
         const userData = snapshot.val();
         const role = userData.role;
-        
+
         // Device binding check to prevent duplicate login on multiple PCs
         let deviceId = localStorage.getItem('deviceId');
         if (!deviceId) {
@@ -42,7 +42,7 @@ export default function Login() {
 
         // Always register this device to the user, replacing any old device binding
         await update(userRef, { registeredDeviceId: deviceId });
-        
+
         // License checking
         let licenseValid = true;
         if (role === 'student') {
@@ -67,10 +67,10 @@ export default function Login() {
             throw new Error('Account deactivated. Institution license is expired.');
           }
         }
-        
+
         localStorage.setItem('userRole', role);
         localStorage.setItem('userName', userData.name || auth.currentUser?.email || 'User');
-        
+
         // Route based on role
         if (role === 'student') navigate('/student-dashboard', { replace: true });
         else if (role === 'teacher' || role === 'admin') navigate('/', { replace: true });
@@ -109,7 +109,7 @@ export default function Login() {
         <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-96 h-96 bg-indigo-500 rounded-full blur-[120px] opacity-20"></div>
 
         <div className="relative z-10 p-10">
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8 }}
@@ -140,7 +140,7 @@ export default function Login() {
         <div className="relative z-10 p-10 pt-0">
           <div className="grid grid-cols-1 gap-3">
             {featureCards.map((feature, idx) => (
-              <motion.div 
+              <motion.div
                 key={idx}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -161,8 +161,8 @@ export default function Login() {
       </div>
 
       {/* Right Column - Login Form */}
-      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center p-6 sm:p-10 bg-slate-50 relative overflow-y-auto">
-        <motion.div 
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-10 bg-slate-50 relative overflow-y-auto">
+        <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: "easeOut" }}
@@ -170,20 +170,20 @@ export default function Login() {
         >
           {/* Mobile Header (Only visible on small screens) */}
           <div className="lg:hidden flex flex-col items-center mb-8">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.3 }}
               className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg mb-4"
             >
               <Building2 className="w-8 h-8 text-white" />
             </motion.div>
-            <motion.h1 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} 
+            <motion.h1
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }}
               className="text-2xl font-bold text-slate-900 tracking-tight text-center"
             >
               Language Lab AI
             </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} 
+            <motion.p
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }}
               className="text-slate-500 mt-2 text-sm text-center"
             >
               Language Laboratory Portal
@@ -192,7 +192,7 @@ export default function Login() {
 
           <Card className="shadow-2xl shadow-primary-900/10 border-0 bg-white/90 backdrop-blur-xl ring-1 ring-slate-200/50">
             <CardContent className="p-8 sm:p-10">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                 className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100"
               >
@@ -213,27 +213,27 @@ export default function Login() {
                 )}
                 <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }} className="space-y-1.5">
                   <label className="text-sm font-semibold text-slate-700">Email Address</label>
-                  <Input 
-                    icon={<Mail className="w-5 h-5 text-slate-400" />} 
+                  <Input
+                    icon={<Mail className="w-5 h-5 text-slate-400" />}
                     type="email"
-                    placeholder="name@institution.edu" 
-                    required 
+                    placeholder="name@institution.edu"
+                    required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-11 text-base bg-slate-50 border-slate-200 focus:bg-white transition-colors"
                   />
                 </motion.div>
-                
+
                 <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }} className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-sm font-semibold text-slate-700">Password</label>
                     <a href="#" className="text-sm text-primary-600 hover:text-primary-700 font-medium hover:underline underline-offset-4 transition-all">Forgot password?</a>
                   </div>
-                  <Input 
-                    icon={<Lock className="w-5 h-5 text-slate-400" />} 
-                    type="password" 
-                    placeholder="••••••••" 
-                    required 
+                  <Input
+                    icon={<Lock className="w-5 h-5 text-slate-400" />}
+                    type="password"
+                    placeholder="••••••••"
+                    required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="h-11 text-base bg-slate-50 border-slate-200 focus:bg-white transition-colors"
@@ -241,10 +241,10 @@ export default function Login() {
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }} className="flex items-center pt-1">
-                  <input 
-                    type="checkbox" 
-                    id="remember" 
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/20 focus:ring-offset-0 cursor-pointer transition-colors" 
+                  <input
+                    type="checkbox"
+                    id="remember"
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500/20 focus:ring-offset-0 cursor-pointer transition-colors"
                   />
                   <label htmlFor="remember" className="ml-2 block text-sm font-medium text-slate-600 cursor-pointer select-none">
                     Keep me signed in
@@ -252,8 +252,8 @@ export default function Login() {
                 </motion.div>
 
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     className={cn("w-full h-11 text-lg font-semibold shadow-xl shadow-primary-500/20 transition-all rounded-lg", isSubmitting && "opacity-90 cursor-wait")}
                     disabled={isSubmitting}
                   >
@@ -271,9 +271,9 @@ export default function Login() {
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="mt-6 pt-4 border-t border-slate-100">
                   <p className="text-xs text-center text-slate-500 font-medium mb-3">Demo Accounts</p>
                   <div className="grid grid-cols-3 gap-2">
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
                       onClick={() => {
                         setEmail('superadmin@languagelab.com');
@@ -282,9 +282,9 @@ export default function Login() {
                     >
                       Super Admin
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
                       onClick={() => {
                         setEmail('teacher@example.com');
@@ -293,9 +293,9 @@ export default function Login() {
                     >
                       Teacher
                     </Button>
-                    <Button 
-                      type="button" 
-                      variant="outline" 
+                    <Button
+                      type="button"
+                      variant="outline"
                       className="text-xs h-9 bg-slate-50 hover:bg-slate-100 px-1"
                       onClick={() => {
                         setEmail('student@example.com');
@@ -310,14 +310,7 @@ export default function Login() {
             </CardContent>
           </Card>
 
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
-            className="mt-6 text-center flex flex-col gap-1.5 text-xs text-slate-400"
-          >
-            <p className="font-medium text-slate-500">v2.4.1 (Enterprise)</p>
-            <p>License Status: <span className="text-success-600 font-medium">Active - Expires Dec 2026</span></p>
-            <p className="mt-2 opacity-75">&copy; 2026 Language Lab AI.</p>
-          </motion.div>
+
         </motion.div>
       </div>
     </div>

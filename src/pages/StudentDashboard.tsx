@@ -31,6 +31,7 @@ export default function StudentDashboard() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [testResults, setTestResults] = useState<any[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
+  const [aiLearning, setAiLearning] = useState<any>(null);
 
   useEffect(() => {
     const unsubAuth = auth.onAuthStateChanged(user => {
@@ -41,6 +42,11 @@ export default function StudentDashboard() {
 
       onValue(ref(database, 'users/' + user.uid), snap => {
         if (snap.exists()) setStudentData(snap.val());
+      });
+
+      onValue(ref(database, 'users/' + user.uid + '/aiLearning'), snap => {
+        if (snap.exists()) setAiLearning(snap.val());
+        else setAiLearning(null);
       });
 
       onValue(ref(database, 'users/' + user.uid + '/assignments'), snap => {
@@ -97,9 +103,70 @@ export default function StudentDashboard() {
 
   const recentTests = [...testResults].sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()).slice(0, 3);
 
-  // Dynamic achievements based on actual testResults
-  const isPerfectWordUnlocked = testResults.some(r => r.score >= 90);
-  const isStreakUnlocked = completed >= 3;
+  // ── REAL DYNAMIC ACHIEVEMENTS ──────────────────────────────────────────────
+  const highestScore = testResults.length > 0 ? Math.max(...testResults.map(r => r.score)) : 0;
+  const highestScoreLesson = testResults.find(r => r.score === highestScore);
+  const aiXp = aiLearning?.xp || 0;
+  const aiStreak = aiLearning?.streak || 0;
+  const aiCompletedMilestones: string[] = aiLearning?.completedMilestones || [];
+  const placementReadiness = studentData?.placementReadiness || null;
+  const weakAreas = studentData?.weakAreas || null;
+
+  const badges = [
+    {
+      id: 'first_quiz',
+      icon: Award,
+      color: 'bg-amber-50 text-amber-500 border-amber-100',
+      unlocked: testResults.length > 0,
+      title: testResults.length > 0 ? 'First Quiz Taken! 🏅' : 'First Quiz',
+      desc: testResults.length > 0
+        ? `Completed ${testResults.length} quiz${testResults.length > 1 ? 'zes' : ''} so far`
+        : 'Take your first quiz to unlock',
+    },
+    {
+      id: 'high_score',
+      icon: Star,
+      color: 'bg-yellow-50 text-yellow-500 border-yellow-100',
+      unlocked: highestScore >= 90,
+      title: highestScore >= 90 ? `Top Scorer: ${highestScore}% 🌟` : 'Top Scorer',
+      desc: highestScore >= 90
+        ? `"${highestScoreLesson?.lessonName || 'Quiz'}" — ${highestScore}%`
+        : `Best so far: ${highestScore}% (need 90% to unlock)`,
+    },
+    {
+      id: 'lessons_done',
+      icon: CheckCircle,
+      color: 'bg-emerald-50 text-emerald-500 border-emerald-100',
+      unlocked: completed >= 3,
+      title: completed >= 3 ? `Lesson Champion 📚` : '3 Lessons Completed',
+      desc: completed > 0
+        ? `${completed} of ${total} lesson${total !== 1 ? 's' : ''} completed`
+        : 'Complete 3 lessons to unlock',
+    },
+    {
+      id: 'ai_learning',
+      icon: Zap,
+      color: 'bg-indigo-50 text-indigo-500 border-indigo-100',
+      unlocked: aiXp >= 50,
+      title: aiXp >= 50 ? `AI Learner ⚡ ${aiXp} XP` : 'AI Learner',
+      desc: aiXp > 0
+        ? `Earned ${aiXp} XP in AI Learning`
+        : 'Start AI Learning to earn XP',
+    },
+    {
+      id: 'placement',
+      icon: TrendingUp,
+      color: 'bg-blue-50 text-blue-500 border-blue-100',
+      unlocked: !!placementReadiness && placementReadiness >= 60,
+      title: placementReadiness ? `Placement Ready: ${placementReadiness}% 🎯` : 'Placement Readiness',
+      desc: placementReadiness
+        ? weakAreas && weakAreas !== 'None'
+          ? `Focus areas: ${weakAreas}`
+          : 'All skills strong! Keep it up.'
+        : 'Complete AI Diagnostic to see your score',
+    },
+  ];
+  const unlockedBadges = badges.filter(b => b.unlocked);
 
   return (
     <div className="space-y-6 pb-6 pr-4">
@@ -175,44 +242,40 @@ export default function StudentDashboard() {
           </div>
         </div>
 
-        {/* Right Achievements Card - Dynamic achievements based on test scores */}
+        {/* Right Achievements Card - 100% real data from Firebase */}
         <Card className="border-slate-205 shadow-sm rounded-2xl p-6 flex flex-col bg-white">
-          <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-6 border-b border-slate-50 pb-2">Achievements</h3>
-          <div className="space-y-5 flex-1">
-            {/* Row 1 - Perfect Pronunciation */}
-            <div className="flex items-start gap-3">
-              <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border",
-                isPerfectWordUnlocked ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-slate-50 text-slate-350 border-slate-100 opacity-60"
-              )}>
-                {isPerfectWordUnlocked ? <Award className="w-5 h-5" /> : <Lock className="w-4 h-4 text-slate-400" />}
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800 text-sm">Perfect Pronunciation</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {isPerfectWordUnlocked ? "Scored 90+ in quiz! Unlocked" : "Score 90+ in quiz to unlock"}
-                </p>
-              </div>
-            </div>
-
-            {/* Row 2 - 7 Day Streak */}
-            <div className="flex items-start gap-4">
-              <div className={cn(
-                "w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border",
-                isStreakUnlocked ? "bg-blue-50 text-blue-500 border-blue-105" : "bg-slate-50 text-slate-350 border-slate-100 opacity-60"
-              )}>
-                {isStreakUnlocked ? <Target className="w-5 h-5" /> : <Lock className="w-4 h-4 text-slate-400" />}
-              </div>
-              <div>
-                <h4 className="font-bold text-slate-800 text-sm">7 Day Streak</h4>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {isStreakUnlocked ? "Completed 3+ lessons! Unlocked" : "Complete 3 lessons to unlock"}
-                </p>
-              </div>
-            </div>
+          <div className="flex items-center justify-between mb-4 border-b border-slate-50 pb-2">
+            <h3 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Achievements</h3>
+            {unlockedBadges.length > 0 && (
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                {unlockedBadges.length}/{badges.length} Unlocked
+              </span>
+            )}
           </div>
-          <button className="w-full mt-6 border border-slate-200 text-slate-600 hover:bg-slate-50 text-[11px] font-bold py-2.5 rounded-xl transition-all shadow-sm cursor-pointer">
-            View All Badges
+          <div className="space-y-4 flex-1">
+            {badges.slice(0, 2).map(badge => {
+              const Icon = badge.icon;
+              return (
+                <div key={badge.id} className="flex items-start gap-3">
+                  <div className={cn(
+                    'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 shadow-sm border transition-all',
+                    badge.unlocked ? badge.color : 'bg-slate-50 text-slate-300 border-slate-100 opacity-60'
+                  )}>
+                    {badge.unlocked ? <Icon className="w-5 h-5" /> : <Lock className="w-4 h-4 text-slate-400" />}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-slate-800 text-sm leading-snug">{badge.title}</h4>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{badge.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button
+            onClick={() => navigate('/reports')}
+            className="w-full mt-5 border border-slate-200 text-slate-600 hover:bg-slate-50 text-[11px] font-bold py-2.5 rounded-xl transition-all shadow-sm cursor-pointer"
+          >
+            View All {badges.length} Badges
           </button>
         </Card>
       </div>
