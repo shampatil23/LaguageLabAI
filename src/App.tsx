@@ -14,10 +14,11 @@ import ConversationPractice from './pages/ConversationPractice';
 import StudentDashboard from './pages/StudentDashboard';
 import StudentsList from './pages/StudentsList';
 import TeachersList from './pages/TeachersList';
-import Communication from './pages/Communication';
+import Broadcast from './pages/Broadcast';
 import Analytics from './pages/Analytics';
 import Downloads from './pages/Downloads';
 import AILearning from './pages/AILearning';
+import CreateCourse from './pages/CreateCourse';
 
 const DashboardRouter = () => {
   const role = localStorage.getItem('userRole');
@@ -31,13 +32,14 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<Login />} />
-        
+
         <Route element={<Layout />}>
           <Route path="/" element={<DashboardRouter />} />
           <Route path="/super-admin" element={<SuperAdminDashboard />} />
           <Route path="/institutions" element={<SuperAdminDashboard />} />
           <Route path="/student-dashboard" element={<StudentDashboard />} />
-                    <Route path="/courses" element={<CourseManagement />} />
+          <Route path="/create-course" element={<CreateCourse />} />
+          <Route path="/courses" element={<CourseManagement />} />
           <Route path="/content-library" element={<ContentLibrary />} />
           <Route path="/assessments" element={<Assessments />} />
           <Route path="/speaking-evaluation" element={<SpeakingEvaluation />} />
@@ -45,8 +47,8 @@ export default function App() {
           <Route path="/reports" element={<Reports />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/students" element={<StudentsList />} />
-                    <Route path="/teachers" element={<TeachersList />} />
-          <Route path="/communication" element={<Communication />} />
+          <Route path="/teachers" element={<TeachersList />} />
+          <Route path="/communication" element={<Broadcast />} />
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/downloads" element={<Downloads />} />
           <Route path="/ai-learning" element={<AILearning />} />

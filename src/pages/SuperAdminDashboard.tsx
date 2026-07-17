@@ -31,30 +31,15 @@ export default function SuperAdminDashboard() {
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [currentRejectReq, setCurrentRejectReq] = useState<any>(null);
-  const [courses, setCourses] = useState<CourseCatalog[]>([]);
-  const [showCourseForm, setShowCourseForm] = useState(false);
-  const [courseSaving, setCourseSaving] = useState(false);
-  const [courseMode, setCourseMode] = useState<'create' | 'upload'>('create');
-  const [courseUpload, setCourseUpload] = useState<File | null>(null);
-  const [courseForm, setCourseForm] = useState({
-    title: '',
-    className: '',
-    semester: '',
-    sessionName: '',
-    lessonName: '',
-    lessonType: 'HTML',
-    content: '',
-    resourceUrl: ''
-  });
 
-  
+
   // Default to 1 year from now
   const defaultExpiry = new Date();
   defaultExpiry.setFullYear(defaultExpiry.getFullYear() + 1);
 
-  const [formData, setFormData] = useState({ 
-    name: '', 
-    email: '', 
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
     password: '',
     startDate: new Date().toISOString().split('T')[0],
     expiryDate: defaultExpiry.toISOString().split('T')[0]
@@ -90,21 +75,10 @@ export default function SuperAdminDashboard() {
       }
     });
 
-    const courseCatalogRef = ref(database, 'courseCatalog');
-    const unsubCourses = onValue(courseCatalogRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setCourses(Object.entries(data).map(([id, value]: [string, any]) => ({ id, ...value })));
-      } else {
-        setCourses([]);
-      }
-    });
-
     return () => {
       unsubSettings();
       unsubscribe();
       unsubReq();
-      unsubCourses();
     };
   }, []);
 
@@ -119,9 +93,9 @@ export default function SuperAdminDashboard() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
-      
+
       const newUserId = data.uid;
-      
+
       await set(ref(database, 'users/' + newUserId), {
         name: formData.name,
         email: formData.email,
@@ -130,11 +104,11 @@ export default function SuperAdminDashboard() {
         licenseStartDate: new Date(formData.startDate).toISOString(),
         licenseExpiry: new Date(formData.expiryDate).toISOString()
       });
-      
+
       setShowAddForm(false);
-      setFormData({ 
-        name: '', 
-        email: '', 
+      setFormData({
+        name: '',
+        email: '',
         password: '',
         startDate: new Date().toISOString().split('T')[0],
         expiryDate: defaultExpiry.toISOString().split('T')[0]
@@ -165,7 +139,7 @@ export default function SuperAdminDashboard() {
       if (currentExpiry < new Date()) {
         currentExpiry = new Date();
       }
-      
+
       if (req.duration && req.duration.includes('1_month')) {
         currentExpiry.setMonth(currentExpiry.getMonth() + 1);
       } else if (req.duration && req.duration.includes('3_months')) {
@@ -183,7 +157,7 @@ export default function SuperAdminDashboard() {
       if (req.studentLimit) {
         updates.studentLimit = req.studentLimit;
       }
-      
+
       await update(ref(database, 'users/' + req.institutionId), updates);
 
       // Update request status
@@ -219,98 +193,7 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const resetCourseForm = () => {
-    setCourseForm({
-      title: '',
-      className: '',
-      semester: '',
-      sessionName: '',
-      lessonName: '',
-      lessonType: 'HTML',
-      content: '',
-      resourceUrl: ''
-    });
-    setCourseUpload(null);
-    setCourseMode('create');
-  };
 
-  const handleCreateCourse = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (courseMode === 'create' && !courseForm.content.trim() && !courseForm.resourceUrl.trim()) {
-      alert('Add lesson content or a resource URL.');
-      return;
-    }
-    if (courseMode === 'upload' && !courseUpload) {
-      alert('Select a lesson file to upload.');
-      return;
-    }
-
-    setCourseSaving(true);
-    try {
-      const normalise = (value: string) => value.trim().toLowerCase();
-      const existingCourse = courses.find(course =>
-        normalise(course.title) === normalise(courseForm.title) &&
-        normalise(course.className) === normalise(courseForm.className) &&
-        normalise(course.semester) === normalise(courseForm.semester)
-      );
-      const courseId = existingCourse?.id || push(ref(database, 'courseCatalog')).key;
-      if (!courseId) throw new Error('Could not create the course. Please try again.');
-
-      if (!existingCourse) {
-        await set(ref(database, `courseCatalog/${courseId}`), {
-          title: courseForm.title.trim(),
-          className: courseForm.className.trim(),
-          semester: courseForm.semester.trim(),
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      const existingSession = Object.entries(existingCourse?.sessions || {}).find(([, session]) =>
-        normalise((session as CourseSession).name) === normalise(courseForm.sessionName)
-      );
-      const sessionId = existingSession?.[0] || push(ref(database, `courseCatalog/${courseId}/sessions`)).key;
-      if (!sessionId) throw new Error('Could not create the session. Please try again.');
-
-      if (!existingSession) {
-        await set(ref(database, `courseCatalog/${courseId}/sessions/${sessionId}`), {
-          name: courseForm.sessionName.trim(),
-          createdAt: new Date().toISOString()
-        });
-      }
-
-      const lessonRef = push(ref(database, `courseCatalog/${courseId}/sessions/${sessionId}/lessons`));
-      let fileUrl = '';
-      let fileName = '';
-      if (courseUpload) {
-        const safeFileName = courseUpload.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-        const uploadRef = storageRef(storage, `course-lessons/${courseId}/${Date.now()}-${safeFileName}`);
-        await uploadBytes(uploadRef, courseUpload);
-        fileUrl = await getDownloadURL(uploadRef);
-        fileName = courseUpload.name;
-      }
-
-      await set(lessonRef, {
-        name: courseForm.lessonName.trim(),
-        type: courseForm.lessonType,
-        content: courseMode === 'create' ? courseForm.content.trim() : '',
-        resourceUrl: courseMode === 'create' ? courseForm.resourceUrl.trim() : fileUrl,
-        fileName,
-        className: courseForm.className.trim(),
-        semester: courseForm.semester.trim(),
-        sessionName: courseForm.sessionName.trim(),
-        createdAt: new Date().toISOString()
-      });
-
-      alert('Lesson added to the course catalog. Teachers can now assign it from Assessments.');
-      resetCourseForm();
-      setShowCourseForm(false);
-    } catch (err) {
-      console.error(err);
-      alert('Could not save the lesson. Check Firebase Database and Storage permissions, then try again.');
-    } finally {
-      setCourseSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -354,10 +237,6 @@ export default function SuperAdminDashboard() {
           <p className="text-slate-500 mt-1">Manage Institute Admins (Teachers) and Licenses.</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button variant="outline" onClick={() => setShowCourseForm(true)}>
-            <BookPlus className="w-4 h-4 mr-2" />
-            Create Course
-          </Button>
           <Button onClick={() => setShowAddForm(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Add Institute Admin
@@ -365,116 +244,9 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {showCourseForm && (
-        <Card className="border-primary-200 bg-primary-50/30">
-          <CardHeader>
-            <CardTitle>Create Course & Add Lesson</CardTitle>
-            <p className="text-sm text-slate-500">Create the course structure in order: class/semester, session, then lesson. Existing class, semester, and session values are reused when adding another lesson.</p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleCreateCourse} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Course / Subject</label>
-                  <Input required value={courseForm.title} onChange={e => setCourseForm({ ...courseForm, title: e.target.value })} placeholder="e.g. English Communication" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Class / Programme</label>
-                  <Input required value={courseForm.className} onChange={e => setCourseForm({ ...courseForm, className: e.target.value })} placeholder="e.g. BCA" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Semester</label>
-                  <Input required value={courseForm.semester} onChange={e => setCourseForm({ ...courseForm, semester: e.target.value })} placeholder="e.g. Semester 1" />
-                </div>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Session / Unit</label>
-                  <Input required value={courseForm.sessionName} onChange={e => setCourseForm({ ...courseForm, sessionName: e.target.value })} placeholder="e.g. Phonetics: Consonants" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Lesson Name</label>
-                  <Input required value={courseForm.lessonName} onChange={e => setCourseForm({ ...courseForm, lessonName: e.target.value })} placeholder="e.g. Vowel and diphthong practice" />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-sm font-medium text-slate-700">Lesson Type</label>
-                  <select value={courseForm.lessonType} onChange={e => setCourseForm({ ...courseForm, lessonType: e.target.value })} className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20">
-                    <option value="HTML">Interactive / HTML</option>
-                    <option value="Video">Video</option>
-                    <option value="Document">Document / PDF</option>
-                    <option value="Audio">Audio</option>
-                    <option value="Link">External link</option>
-                  </select>
-                </div>
-              </div>
 
-              <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
-                <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" variant={courseMode === 'create' ? 'primary' : 'outline'} onClick={() => setCourseMode('create')}>
-                    <FileText className="w-4 h-4 mr-2" /> Create lesson
-                  </Button>
-                  <Button type="button" size="sm" variant={courseMode === 'upload' ? 'primary' : 'outline'} onClick={() => setCourseMode('upload')}>
-                    <Upload className="w-4 h-4 mr-2" /> Upload lesson file
-                  </Button>
-                </div>
 
-                {courseMode === 'create' ? (
-                  <>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">Lesson Content</label>
-                      <textarea value={courseForm.content} onChange={e => setCourseForm({ ...courseForm, content: e.target.value })} rows={5} placeholder="Write the instructions, lesson text, or HTML content for this lesson..." className="w-full rounded-md border border-slate-300 bg-white p-3 text-sm focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-sm font-medium text-slate-700">Resource URL <span className="text-slate-400">(optional)</span></label>
-                      <Input type="url" value={courseForm.resourceUrl} onChange={e => setCourseForm({ ...courseForm, resourceUrl: e.target.value })} placeholder="https://..." />
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-1.5">
-                    <label className="text-sm font-medium text-slate-700">Lesson File</label>
-                    <input required type="file" accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4,.webm,.mp3,.wav,.html,.htm" onChange={e => setCourseUpload(e.target.files?.[0] || null)} className="block w-full text-sm text-slate-600 file:mr-4 file:rounded-md file:border-0 file:bg-primary-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary-700 hover:file:bg-primary-100" />
-                    <p className="text-xs text-slate-500">Upload a document, audio, video, or HTML lesson. The file is saved in Firebase Storage.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3">
-                <Button type="button" variant="outline" onClick={() => { resetCourseForm(); setShowCourseForm(false); }}>Cancel</Button>
-                <Button type="submit" disabled={courseSaving}>
-                  {courseSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Save Lesson to Catalog
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Course Catalog</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {courses.length === 0 ? (
-            <p className="text-sm text-slate-500">No courses yet. Create a course to make lessons available in the teacher Assessments page.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {courses.map(course => {
-                const sessionCount = Object.keys(course.sessions || {}).length;
-                const lessonCount = Object.values(course.sessions || {}).reduce((total, session) => total + Object.keys(session.lessons || {}).length, 0);
-                return (
-                  <div key={course.id} className="rounded-lg border border-slate-200 bg-white p-4">
-                    <p className="font-semibold text-slate-900">{course.title}</p>
-                    <p className="mt-1 text-sm text-slate-600">{course.className} · {course.semester}</p>
-                    <p className="mt-3 text-xs font-medium text-primary-700">{sessionCount} session{sessionCount === 1 ? '' : 's'} · {lessonCount} lesson{lessonCount === 1 ? '' : 's'}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       {showAddForm && (
         <Card className="border-primary-100 bg-primary-50/30">
@@ -485,24 +257,24 @@ export default function SuperAdminDashboard() {
             <form onSubmit={handleAddInstitution} className="space-y-4 max-w-md">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Admin/Institute Name</label>
-                <Input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} icon={<Building2 className="w-4 h-4 text-slate-400" />} />
+                <Input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} icon={<Building2 className="w-4 h-4 text-slate-400" />} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Email (Login)</label>
-                <Input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} icon={<Mail className="w-4 h-4 text-slate-400" />} />
+                <Input type="email" required value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} icon={<Mail className="w-4 h-4 text-slate-400" />} />
               </div>
               <div className="space-y-1.5">
                 <label className="text-sm font-medium text-slate-700">Password</label>
-                <Input type="password" required minLength={6} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} icon={<Lock className="w-4 h-4 text-slate-400" />} />
+                <Input type="password" required minLength={6} value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} icon={<Lock className="w-4 h-4 text-slate-400" />} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700">License Start Date</label>
-                  <Input type="date" required value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} icon={<Calendar className="w-4 h-4 text-slate-400" />} />
+                  <Input type="date" required value={formData.startDate} onChange={e => setFormData({ ...formData, startDate: e.target.value })} icon={<Calendar className="w-4 h-4 text-slate-400" />} />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-sm font-medium text-slate-700">License Expiry Date</label>
-                  <Input type="date" required value={formData.expiryDate} onChange={e => setFormData({...formData, expiryDate: e.target.value})} icon={<Calendar className="w-4 h-4 text-slate-400" />} />
+                  <Input type="date" required value={formData.expiryDate} onChange={e => setFormData({ ...formData, expiryDate: e.target.value })} icon={<Calendar className="w-4 h-4 text-slate-400" />} />
                 </div>
               </div>
               <div className="flex gap-3 pt-2">
@@ -554,9 +326,9 @@ export default function SuperAdminDashboard() {
                     <TableCell>
                       <span className={cn(
                         "inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ring-1 ring-inset",
-                        req.status === 'pending' ? "bg-amber-50 text-amber-700 ring-amber-600/20" : 
-                        req.status === 'approved' ? "bg-success-50 text-success-700 ring-success-600/20" : 
-                        "bg-error-50 text-error-700 ring-error-600/20"
+                        req.status === 'pending' ? "bg-amber-50 text-amber-700 ring-amber-600/20" :
+                          req.status === 'approved' ? "bg-success-50 text-success-700 ring-success-600/20" :
+                            "bg-error-50 text-error-700 ring-error-600/20"
                       )}>
                         {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
                       </span>
@@ -564,8 +336,8 @@ export default function SuperAdminDashboard() {
                     <TableCell className="text-right">
                       {req.status === 'pending' && (
                         <div className="flex justify-end gap-2">
-                          <Button size="sm" onClick={() => handleApproveRequest(req)} className="bg-success-600 hover:bg-success-700 text-white"><CheckCircle2 className="w-4 h-4 mr-1"/> Approve</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleRejectRequest(req)} className="text-error-600 hover:text-error-700 hover:bg-error-50"><XCircle className="w-4 h-4 mr-1"/> Reject</Button>
+                          <Button size="sm" onClick={() => handleApproveRequest(req)} className="bg-success-600 hover:bg-success-700 text-white"><CheckCircle2 className="w-4 h-4 mr-1" /> Approve</Button>
+                          <Button size="sm" variant="outline" onClick={() => handleRejectRequest(req)} className="text-error-600 hover:text-error-700 hover:bg-error-50"><XCircle className="w-4 h-4 mr-1" /> Reject</Button>
                         </div>
                       )}
                     </TableCell>

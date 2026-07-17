@@ -29,12 +29,15 @@ async function startServer() {
       const { messages } = req.body;
       const chatCompletion = await groq.chat.completions.create({
         messages,
-        model: "llama3-8b-8192", // We can use the LLaMA3 model available on Groq
+        model: "llama-3.3-70b-versatile", // Use active llama-3.3-70b-versatile model
       });
       res.json({ result: chatCompletion.choices[0]?.message?.content || "" });
     } catch (error) {
       console.error(error);
-      res.status(500).json({ error: "Failed to generate completion" });
+      res.status(500).json({
+        error: "Failed to generate completion",
+        details: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 
@@ -43,7 +46,7 @@ async function startServer() {
     try {
       const { email, password } = req.body;
       const apiKey = process.env.VITE_FIREBASE_API_KEY;
-      
+
       if (!apiKey) {
         return res.status(500).json({ error: "Firebase API key not configured" });
       }

@@ -1,29 +1,31 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  MonitorPlay, 
-  BookOpen, 
-  FolderOpen, 
-  Users, 
-  UserSquare2, 
-  FileCheck, 
-  BarChart3, 
-  PieChart, 
-  MessageSquare, 
-  DownloadCloud, 
-  BrainCircuit, 
+import {
+  LayoutDashboard,
+  MonitorPlay,
+  BookOpen,
+  FolderOpen,
+  Users,
+  UserSquare2,
+  FileCheck,
+  BarChart3,
+  PieChart,
+  MessageSquare,
+  DownloadCloud,
+  BrainCircuit,
   Settings,
   Target,
   ChevronLeft,
   ChevronRight,
-  Building2
+  Building2,
+  Megaphone
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 const superAdminNavItems = [
   { name: 'Dashboard', path: '/super-admin', icon: LayoutDashboard },
   { name: 'Institutions', path: '/institutions', icon: Building2 },
+  { name: 'Create Course', path: '/create-course', icon: BookOpen },
 ];
 
 import { UserPlus } from 'lucide-react';
@@ -36,7 +38,7 @@ const teacherNavItems = [
   { name: 'Content Library', path: '/content-library', icon: FolderOpen },
   { name: 'Reports', path: '/reports', icon: BarChart3 },
   { name: 'Analytics', path: '/analytics', icon: PieChart },
-  { name: 'Communication', path: '/communication', icon: MessageSquare },
+  { name: 'Broadcast', path: '/communication', icon: Megaphone },
   { name: 'Downloads', path: '/downloads', icon: DownloadCloud },
 ];
 
@@ -45,13 +47,14 @@ const studentNavItems = [
   { name: 'My Assessments', path: '/assessments', icon: FileCheck },
   { name: 'My Courses', path: '/courses', icon: BookOpen },
   { name: 'AI Conversation', path: '/conversation-practice', icon: BrainCircuit },
+  { name: 'Notices', path: '/communication', icon: Megaphone },
   { name: 'My Progress', path: '/reports', icon: Target },
 ];
 
 export function Sidebar() {
   const role = localStorage.getItem('userRole') || 'teacher';
   const [collapsed, setCollapsed] = useState(false);
-  
+
   let navItems = teacherNavItems;
   if (role === 'student') navItems = studentNavItems;
   if (role === 'super_admin') navItems = superAdminNavItems;
@@ -67,7 +70,7 @@ export function Sidebar() {
           collapsed ? "justify-center px-0" : "justify-between px-3"
         )}>
           {!collapsed && <span>Menu</span>}
-          <button 
+          <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-700 transition-colors"
           >
@@ -82,8 +85,8 @@ export function Sidebar() {
             className={({ isActive }) => cn(
               "flex items-center gap-3 py-2 rounded-md text-sm font-medium transition-colors",
               collapsed ? "justify-center px-0" : "px-3",
-              isActive 
-                ? "bg-primary-50 text-primary-700" 
+              isActive
+                ? "bg-primary-50 text-primary-700"
                 : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
             )}
           >
@@ -92,7 +95,7 @@ export function Sidebar() {
           </NavLink>
         ))}
       </div>
-      
+
       <div className={cn("border-t border-slate-200 mt-auto", collapsed ? "p-3" : "p-4")}>
         <NavLink
           to="/settings"
@@ -100,15 +103,15 @@ export function Sidebar() {
           className={({ isActive }) => cn(
             "flex items-center gap-3 py-2 rounded-md text-sm font-medium transition-colors",
             collapsed ? "justify-center px-0" : "px-3",
-            isActive 
-              ? "bg-primary-50 text-primary-700" 
+            isActive
+              ? "bg-primary-50 text-primary-700"
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           )}
         >
           <Settings className="h-4 w-4 shrink-0" />
           {!collapsed && "Settings"}
         </NavLink>
-        
+
         {!collapsed && (
           <div className="mt-4 px-3 flex items-center gap-2 text-xs text-slate-500">
             <div className="w-2 h-2 rounded-full bg-success-500 shrink-0"></div>

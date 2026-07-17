@@ -3,7 +3,7 @@ import { TopRibbon } from './TopRibbon';
 import { Sidebar } from './Sidebar';
 import { useEffect } from 'react';
 import { auth, database } from '../lib/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, set, onDisconnect } from 'firebase/database';
 
 
 export function Layout() {
@@ -15,16 +15,34 @@ export function Layout() {
         navigate('/login');
         return;
       }
-      
+
       const userRef = ref(database, 'users/' + user.uid);
       const unsubDb = onValue(userRef, (snapshot) => {
         const data = snapshot.val();
-        if (data && data.registeredDeviceId) {
-          const localDeviceId = localStorage.getItem('deviceId');
-          if (localDeviceId && data.registeredDeviceId !== localDeviceId) {
-            auth.signOut().then(() => {
-              alert('You have been logged out because your account was accessed from another device.');
-              navigate('/login');
+        if (data) {
+          if (data.registeredDeviceId) {
+            const localDeviceId = localStorage.getItem('deviceId');
+            if (localDeviceId && data.registeredDeviceId !== localDeviceId) {
+              auth.signOut().then(() => {
+                alert('You have been logged out because your account was accessed from another device.');
+                navigate('/login');
+              });
+            }
+          }
+
+          // Real-time student presence tracking
+          if (data.role === 'student') {
+            const statusRef = ref(database, 'users/' + user.uid + '/status');
+            const connectedRef = ref(database, '.info/connected');
+            onValue(connectedRef, (connectedSnap) => {
+              if (connectedSnap.val() === true) {
+                onDisconnect(statusRef).set('Offline');
+                // Avoid overwriting a more detailed status (like Watching/Taking Quiz)
+                // by check: only set to 'Online' if current status is Offline or missing
+                if (!data.status || data.status === 'Offline') {
+                  set(statusRef, 'Online');
+                }
+              }
             });
           }
         }
