@@ -9,7 +9,6 @@ import { FileDown, Trophy, TrendingUp, Users, BookOpen, Star, Zap, Award, Target
 import { database, auth } from '../lib/firebase';
 import { ref, onValue } from 'firebase/database';
 import { cn } from '../lib/utils';
-import * as XLSX from 'xlsx';
 
 type TestResult = {
   id: string;
