@@ -3,18 +3,16 @@
   "outputDirectory": "app/dist",
   "installCommand": "cd app && npm install",
   "framework": null,
+  "functions": {
+    "app/api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 10
+    }
+  },
   "rewrites": [
     {
-      "source": "/api/chat",
-      "destination": "/api/chat"
-    },
-    {
-      "source": "/api/create-user",
-      "destination": "/api/create-user"
-    },
-    {
-      "source": "/api/translate",
-      "destination": "/api/translate"
+      "source": "/api/(.*)",
+      "destination": "/app/api/$1"
     },
     {
       "source": "/(.*)",
