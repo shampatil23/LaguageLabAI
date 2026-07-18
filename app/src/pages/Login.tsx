@@ -13,6 +13,7 @@ import {
   Mic2,
   ShieldCheck,
   Sparkles,
+  User,
   X,
 } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
@@ -134,133 +135,261 @@ export default function Login() {
   const entrance = reduceMotion ? {} : { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 } };
 
   return (
-    <main className="min-h-screen bg-[#f4f7fb] text-[#172033] lg:grid lg:grid-cols-[minmax(460px,0.92fr)_minmax(540px,1.08fr)]">
-      <section className="relative hidden min-h-screen overflow-hidden bg-[#10243f] p-10 text-white lg:flex lg:flex-col lg:justify-between xl:p-14" aria-label="Language Lab AI introduction">
-        <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(circle_at_15%_15%,#67d4c0_0,transparent_28%),radial-gradient(circle_at_82%_76%,#477cc1_0,transparent_32%)]" />
-        <div className="absolute -right-28 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full border border-[#78e0cc]/20" />
-        <div className="absolute -right-12 top-1/2 h-52 w-52 -translate-y-1/2 rounded-full border border-[#78e0cc]/25" />
+    <main className="min-h-screen w-full bg-[#eef1f8] text-[#1a2340] lg:grid lg:grid-cols-[minmax(420px,0.95fr)_minmax(480px,1.05fr)]">
+      {/* Left brand panel */}
+      <section
+        className="relative flex min-h-[320px] flex-col justify-between overflow-hidden bg-gradient-to-br from-[#0b1b45] via-[#16277a] to-[#2b48c9] px-8 py-10 text-white sm:px-12 sm:py-12 lg:min-h-screen lg:px-16 lg:py-16"
+        aria-label="Language Lab AI introduction"
+      >
+        <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(circle_at_10%_10%,rgba(120,160,255,0.35)_0,transparent_35%),radial-gradient(circle_at_90%_85%,rgba(60,90,220,0.4)_0,transparent_40%)]" />
 
         <motion.div {...entrance} transition={{ duration: 0.55 }} className="relative z-10 flex items-center gap-3">
-          <div className="grid h-11 w-11 place-items-center rounded-[14px] bg-[#78e0cc] text-[#10243f] shadow-[0_10px_30px_rgba(120,224,204,0.18)]">
+          <div className="grid h-11 w-11 place-items-center rounded-xl bg-white/15 text-white ring-1 ring-white/25 backdrop-blur-sm">
             <Languages className="h-6 w-6" strokeWidth={2.2} />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#9eb0c6]">Digital learning suite</p>
-            <p className="text-lg font-semibold tracking-tight">Language Lab AI</p>
-          </div>
+          <span className="text-base font-semibold tracking-tight">Global States University</span>
         </motion.div>
 
-        <motion.div {...entrance} transition={{ duration: 0.65, delay: 0.1 }} className="relative z-10 max-w-xl">
-          <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-[#b7c7d9]">
-            <Sparkles className="h-3.5 w-3.5 text-[#78e0cc]" />
-            Listen · speak · improve
-          </div>
-          <h1 className="max-w-lg text-[clamp(2.9rem,5vw,5.25rem)] font-semibold leading-[0.94] tracking-[-0.055em]">
-            Every voice has a new language in it.
+        <motion.div {...entrance} transition={{ duration: 0.65, delay: 0.1 }} className="relative z-10 max-w-lg">
+          <h1 className="text-[clamp(2.1rem,4.2vw,3.4rem)] font-bold leading-[1.05] tracking-tight">
+            Welcome to the{' '}
+            <span className="text-[#8fb2ff]">Language Laboratory Portal.</span>
           </h1>
-          <p className="mt-6 max-w-md text-base leading-7 text-[#b7c7d9]">
-            Step back into your courses, pronunciation practice, and instructor feedback—all in one focused workspace.
+          <p className="mt-5 max-w-md text-[15px] leading-7 text-[#c7d2f5]">
+            Access your language courses, interactive media content, and real-time pronunciation assessments.
           </p>
+        </motion.div>
 
-          <div className="mt-10 max-w-md rounded-[22px] border border-white/10 bg-white/[0.055] p-4 backdrop-blur-sm">
-            <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-[#91a6bd]">
-              <span>Live pronunciation</span>
-              <span className="flex items-center gap-1.5 text-[#78e0cc]"><span className="h-1.5 w-1.5 rounded-full bg-[#78e0cc]" />Listening</span>
+        <motion.div
+          {...entrance}
+          transition={{ duration: 0.55, delay: 0.18 }}
+          className="relative z-10 mt-10 flex flex-col gap-3 sm:max-w-sm"
+        >
+          <div className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 ring-1 ring-white/15 backdrop-blur-sm">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15">
+              <Ear className="h-4.5 w-4.5 h-[18px] w-[18px]" />
             </div>
-            <div className="my-5 flex h-12 items-center gap-1" aria-hidden="true">
-              {[18, 30, 20, 43, 28, 54, 38, 66, 32, 48, 24, 58, 36, 25, 44, 18, 32, 22, 14].map((height, index) => (
-                <span key={index} className="w-1 flex-1 rounded-full bg-[#78e0cc]" style={{ height: `${height}%`, opacity: 0.35 + (index % 4) * 0.15 }} />
-              ))}
+            <div>
+              <p className="text-sm font-semibold">Immersive Audio Lab</p>
+              <p className="text-xs text-[#b9c6f0]">High-fidelity listening exercises.</p>
             </div>
-            <div className="flex items-center gap-3 border-t border-white/10 pt-3">
-              <div className="grid h-8 w-8 place-items-center rounded-full bg-[#78e0cc] text-[#10243f]"><Mic2 className="h-4 w-4" /></div>
-              <p className="text-sm text-[#dce7f2]"><span className="text-[#78e0cc]">Great rhythm.</span> Try softening the final consonant.</p>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 ring-1 ring-white/15 backdrop-blur-sm">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15">
+              <Mic2 className="h-[18px] w-[18px]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Pronunciation AI</p>
+              <p className="text-xs text-[#b9c6f0]">Real-time speech analysis and scoring.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 rounded-2xl bg-white/10 px-4 py-3.5 ring-1 ring-white/15 backdrop-blur-sm">
+            <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-white/15">
+              <Sparkles className="h-[18px] w-[18px]" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Interactive Content</p>
+              <p className="text-xs text-[#b9c6f0]">Engaging multimedia coursework.</p>
             </div>
           </div>
         </motion.div>
-
-        <div className="relative z-10 flex items-center gap-6 text-xs font-medium text-[#91a6bd]">
-          <span className="flex items-center gap-2"><Ear className="h-4 w-4" />Listening labs</span>
-          <span className="flex items-center gap-2"><Headphones className="h-4 w-4" />Guided practice</span>
-          <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4" />Secure access</span>
-        </div>
       </section>
 
-      <section className="relative flex min-h-screen items-center justify-center px-5 py-8 sm:px-10 lg:px-14">
-        <div className="absolute left-5 top-5 flex items-center gap-2.5 lg:hidden">
-          <div className="grid h-9 w-9 place-items-center rounded-xl bg-[#10243f] text-[#78e0cc]"><Languages className="h-5 w-5" /></div>
-          <span className="font-semibold tracking-tight text-[#10243f]">Language Lab AI</span>
-        </div>
+      {/* Right form panel */}
+      <section className="relative flex min-h-screen items-center justify-center px-5 py-10 sm:px-8">
+        <motion.div
+          {...entrance}
+          transition={{ duration: 0.55, delay: 0.08 }}
+          className="w-full max-w-[440px] rounded-[22px] border border-[#e2e6f0] bg-white p-7 shadow-[0_20px_50px_rgba(20,30,70,0.08)] sm:p-9"
+        >
+          <div className="mb-6 flex items-center gap-3">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-[#eef1fb] text-[#2b48c9]">
+              <User className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm text-[#6b7690]">Sign in to your account</p>
+              <p className="text-base font-semibold text-[#1a2340]">Global States University</p>
+            </div>
+          </div>
 
-        <motion.div {...entrance} transition={{ duration: 0.55, delay: 0.08 }} className="w-full max-w-[450px] pt-16 lg:pt-0">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-[#397a70]">Welcome back</p>
-          <h2 className="text-[2.35rem] font-semibold leading-tight tracking-[-0.04em] text-[#10243f] sm:text-[2.7rem]">Continue your learning.</h2>
-          <p className="mt-3 text-[15px] leading-6 text-[#68758a]">Sign in with the account provided by your institution.</p>
+          <div className="mb-6 border-t border-[#eceff5]" />
 
-          <form onSubmit={handleLogin} className="mt-9 space-y-5" noValidate>
+          <form onSubmit={handleLogin} className="space-y-5" noValidate>
             {errorMsg && (
-              <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} role="alert" aria-live="polite" className="flex gap-3 rounded-2xl border border-[#efb3b3] bg-[#fff3f3] p-3.5 text-sm leading-5 text-[#9a3333]">
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                role="alert"
+                aria-live="polite"
+                className="flex gap-3 rounded-xl border border-[#f3c2c2] bg-[#fdf2f2] p-3.5 text-sm leading-5 text-[#9a3333]"
+              >
                 <X className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{errorMsg}</span>
               </motion.div>
             )}
 
             <div>
-              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-[#26364f]">Email address</label>
+              <label htmlFor="email" className="mb-2 block text-sm font-semibold text-[#2a3350]">
+                Email address
+              </label>
               <div className="group relative">
-                <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#91a0b5] transition-colors group-focus-within:text-[#397a70]" />
-                <input id="email" type="email" autoComplete="email" inputMode="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@institution.edu" className="h-14 w-full rounded-2xl border border-[#ced7e3] bg-white pl-12 pr-4 text-[15px] text-[#172033] shadow-[0_1px_2px_rgba(16,36,63,0.03)] outline-none transition placeholder:text-[#a2adbd] hover:border-[#aab7c8] focus:border-[#397a70] focus:ring-4 focus:ring-[#78e0cc]/20" />
+                <Mail className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#98a2ba] transition-colors group-focus-within:text-[#2b48c9]" />
+                <input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  required
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="e.g. name@institution.edu"
+                  className="h-13 h-[52px] w-full rounded-xl border border-[#d7dced] bg-white pl-12 pr-4 text-[15px] text-[#1a2340] outline-none transition placeholder:text-[#a5adc4] hover:border-[#b7c0dd] focus:border-[#2b48c9] focus:ring-4 focus:ring-[#2b48c9]/15"
+                />
               </div>
             </div>
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-semibold text-[#26364f]">Password</label>
-                <button type="button" onClick={() => { setShowReset(true); setResetMessage(''); }} className="rounded-md text-sm font-semibold text-[#397a70] outline-none hover:text-[#285e56] hover:underline focus-visible:ring-2 focus-visible:ring-[#397a70] focus-visible:ring-offset-2">Forgot password?</button>
+                <label htmlFor="password" className="text-sm font-semibold text-[#2a3350]">
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReset(true);
+                    setResetMessage('');
+                  }}
+                  className="rounded-md text-sm font-semibold text-[#2b48c9] outline-none hover:text-[#1e35a3] hover:underline focus-visible:ring-2 focus-visible:ring-[#2b48c9] focus-visible:ring-offset-2"
+                >
+                  Forgot password?
+                </button>
               </div>
               <div className="group relative">
-                <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#91a0b5] transition-colors group-focus-within:text-[#397a70]" />
-                <input id="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="h-14 w-full rounded-2xl border border-[#ced7e3] bg-white pl-12 pr-12 text-[15px] text-[#172033] shadow-[0_1px_2px_rgba(16,36,63,0.03)] outline-none transition placeholder:text-[#a2adbd] hover:border-[#aab7c8] focus:border-[#397a70] focus:ring-4 focus:ring-[#78e0cc]/20" />
-                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? 'Hide password' : 'Show password'} aria-pressed={showPassword} className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-[#748298] outline-none hover:bg-[#edf2f7] hover:text-[#26364f] focus-visible:ring-2 focus-visible:ring-[#397a70]">
+                <LockKeyhole className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#98a2ba] transition-colors group-focus-within:text-[#2b48c9]" />
+                <input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
+                  required
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  className="h-13 h-[52px] w-full rounded-xl border border-[#d7dced] bg-white pl-12 pr-12 text-[15px] text-[#1a2340] outline-none transition placeholder:text-[#a5adc4] hover:border-[#b7c0dd] focus:border-[#2b48c9] focus:ring-4 focus:ring-[#2b48c9]/15"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((value) => !value)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute right-3 top-1/2 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-lg text-[#7b869e] outline-none hover:bg-[#f1f3fa] hover:text-[#2a3350] focus-visible:ring-2 focus-visible:ring-[#2b48c9]"
+                >
                   {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
 
-            <label className="flex w-fit cursor-pointer items-center gap-3 text-sm text-[#56657a]">
-              <input type="checkbox" checked={rememberMe} onChange={(event) => setRememberMe(event.target.checked)} className="h-4 w-4 rounded border-[#b8c3d1] accent-[#397a70] focus:ring-[#397a70]" />
-              Keep me signed in on this device
+            <label className="flex w-fit cursor-pointer items-center gap-3 text-sm text-[#5b6480]">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+                className="h-4 w-4 rounded border-[#c3caE0] accent-[#2b48c9] focus:ring-[#2b48c9]"
+              />
+              Keep me signed in
             </label>
 
-            <button type="submit" disabled={isSubmitting} className="group flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-[#10243f] px-5 text-[15px] font-semibold text-white shadow-[0_12px_28px_rgba(16,36,63,0.18)] outline-none transition hover:-translate-y-0.5 hover:bg-[#17304f] hover:shadow-[0_16px_34px_rgba(16,36,63,0.22)] focus-visible:ring-4 focus-visible:ring-[#78e0cc]/55 disabled:translate-y-0 disabled:cursor-wait disabled:opacity-70">
-              {isSubmitting ? <><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />Signing in…</> : <>Sign in securely<ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" /></>}
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="group flex h-13 h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-[#2b48c9] px-5 text-[15px] font-semibold text-white shadow-[0_12px_28px_rgba(43,72,201,0.28)] outline-none transition hover:-translate-y-0.5 hover:bg-[#233ea8] hover:shadow-[0_16px_34px_rgba(43,72,201,0.32)] focus-visible:ring-4 focus-visible:ring-[#2b48c9]/40 disabled:translate-y-0 disabled:cursor-wait disabled:opacity-70"
+            >
+              {isSubmitting ? (
+                <>
+                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Signing in…
+                </>
+              ) : (
+                <>
+                  Sign In
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
             </button>
           </form>
 
-          <div className="mt-7 flex items-start gap-2.5 rounded-xl bg-[#e9f3f1] px-3.5 py-3 text-xs leading-5 text-[#4b6965]">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#397a70]" />
+          <div className="mt-7 flex items-start gap-2.5 rounded-xl bg-[#eef1fb] px-3.5 py-3 text-xs leading-5 text-[#3d4a7a]">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-[#2b48c9]" />
             Your session is encrypted. Use a trusted device when choosing to stay signed in.
           </div>
 
-          <p className="mt-8 text-center text-xs text-[#8290a3]">Need access? Contact your institution’s language lab administrator.</p>
+          <p className="mt-6 text-center text-xs text-[#8a93ab]">
+            Need access? Contact your institution's language lab administrator.
+          </p>
         </motion.div>
       </section>
 
       {showReset && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[#10243f]/55 p-5 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="reset-title">
-          <motion.form onSubmit={handlePasswordReset} initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 12 }} animate={{ opacity: 1, scale: 1, y: 0 }} className="w-full max-w-md rounded-[24px] bg-white p-6 shadow-2xl sm:p-8">
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-[#0b1b45]/55 p-5 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-title"
+        >
+          <motion.form
+            onSubmit={handlePasswordReset}
+            initial={reduceMotion ? false : { opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="w-full max-w-md rounded-[22px] bg-white p-6 shadow-2xl sm:p-8"
+          >
             <div className="flex items-start justify-between gap-6">
               <div>
-                <div className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-[#e9f3f1] text-[#397a70]"><Mail className="h-5 w-5" /></div>
-                <h3 id="reset-title" className="text-2xl font-semibold tracking-[-0.03em] text-[#10243f]">Reset your password</h3>
-                <p className="mt-2 text-sm leading-6 text-[#68758a]">We’ll email a secure reset link to the address below.</p>
+                <div className="mb-4 grid h-11 w-11 place-items-center rounded-2xl bg-[#eef1fb] text-[#2b48c9]">
+                  <Mail className="h-5 w-5" />
+                </div>
+                <h3 id="reset-title" className="text-2xl font-semibold tracking-tight text-[#1a2340]">
+                  Reset your password
+                </h3>
+                <p className="mt-2 text-sm leading-6 text-[#6b7690]">
+                  We'll email a secure reset link to the address below.
+                </p>
               </div>
-              <button type="button" onClick={() => setShowReset(false)} aria-label="Close password reset" className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[#748298] outline-none hover:bg-[#edf2f7] focus-visible:ring-2 focus-visible:ring-[#397a70]"><X className="h-5 w-5" /></button>
+              <button
+                type="button"
+                onClick={() => setShowReset(false)}
+                aria-label="Close password reset"
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-[#7b869e] outline-none hover:bg-[#f1f3fa] focus-visible:ring-2 focus-visible:ring-[#2b48c9]"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <label htmlFor="reset-email" className="mb-2 mt-6 block text-sm font-semibold text-[#26364f]">Email address</label>
-            <input id="reset-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} className="h-13 w-full rounded-xl border border-[#ced7e3] bg-white px-4 text-[15px] outline-none focus:border-[#397a70] focus:ring-4 focus:ring-[#78e0cc]/20" />
-            {resetMessage && <div aria-live="polite" className="mt-4 flex gap-2 rounded-xl bg-[#eef5f4] p-3 text-sm leading-5 text-[#397a70]"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />{resetMessage}</div>}
-            <button type="submit" disabled={isResetting} className="mt-5 h-12 w-full rounded-xl bg-[#10243f] text-sm font-semibold text-white outline-none hover:bg-[#17304f] focus-visible:ring-4 focus-visible:ring-[#78e0cc]/55 disabled:cursor-wait disabled:opacity-70">{isResetting ? 'Sending link…' : 'Send reset link'}</button>
+            <label htmlFor="reset-email" className="mb-2 mt-6 block text-sm font-semibold text-[#2a3350]">
+              Email address
+            </label>
+            <input
+              id="reset-email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="h-12 w-full rounded-xl border border-[#d7dced] bg-white px-4 text-[15px] outline-none focus:border-[#2b48c9] focus:ring-4 focus:ring-[#2b48c9]/15"
+            />
+            {resetMessage && (
+              <div
+                aria-live="polite"
+                className="mt-4 flex gap-2 rounded-xl bg-[#eef1fb] p-3 text-sm leading-5 text-[#2b48c9]"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                {resetMessage}
+              </div>
+            )}
+            <button
+              type="submit"
+              disabled={isResetting}
+              className="mt-5 h-12 w-full rounded-xl bg-[#2b48c9] text-sm font-semibold text-white outline-none hover:bg-[#233ea8] focus-visible:ring-4 focus-visible:ring-[#2b48c9]/40 disabled:cursor-wait disabled:opacity-70"
+            >
+              {isResetting ? 'Sending link…' : 'Send reset link'}
+            </button>
           </motion.form>
         </div>
       )}
