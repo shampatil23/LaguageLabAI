@@ -543,7 +543,9 @@ export default function AILearning() {
     if (res.ok && res.text) {
       setLessonContent(res.text);
     } else {
-      setLessonContent(`## ${activity}\n\n${res.error || 'Practice this activity carefully. Focus on the core concepts and apply them step by step.'}`);
+      // Generate a static fallback lesson so the user always sees content
+      setLessonContent(`## 🎯 Learning Objectives
+In this activity, you will practice **${activity}** as part of your ${milestone.title} milestone.\n\n## 👩‍🏫 The Lesson\nThis lesson focuses on ${milestone.desc}. Work through the activity step by step, applying the core concepts to real-life situations.\n\n## 📝 Practice\nTry to complete the activity "${activity}" by yourself first. Then compare with your notes or ask the AI tutor for help.\n\n## 💡 Quick Tips\n- Read the instructions carefully before starting\n- Focus on your weak areas: ${(profile?.weakTopics || ['core concepts']).slice(0,2).join(', ')}\n- Don't rush — understanding beats speed\n\n## 🔑 Key Takeaways\nComplete this activity to build confidence and move to the next step in your learning journey.`);
     }
     setLessonLoading(false);
   };
@@ -586,7 +588,9 @@ export default function AILearning() {
     });
     setTutorMessages(m => [...m, {
       role: 'assistant',
-      content: res.ok && res.text ? res.text : (res.error || 'Sorry, I could not answer right now. Please try again.'),
+      content: res.ok && res.text
+        ? res.text
+        : '💬 I\'m having a momentary connection issue. Please try your question again — I\'m here to help!',
     }]);
     setTutorLoading(false);
   };
@@ -607,7 +611,20 @@ export default function AILearning() {
       questionStartRef.current = Date.now();
       setScreen('test');
     } else {
-      showToast(res.error || 'Could not generate the test. Please try again.', 'info');
+      // Static fallback test questions if AI fails
+      const fallbackQuestions = [
+        { question: `What is the most important focus area in "${activeMilestone.title}"?`, options: ['Practice regularly', 'Memorize rules only', 'Skip difficult parts', 'Avoid speaking'], answer: 'Practice regularly', concept: 'Learning strategy', difficulty: 'easy', type: 'knowledge' },
+        { question: 'Which approach helps improve English speaking most effectively?', options: ['Reading silently', 'Speaking with others daily', 'Only studying grammar', 'Watching without subtitles'], answer: 'Speaking with others daily', concept: 'Speaking practice', difficulty: 'easy', type: 'application' },
+        { question: 'Complete: "She ___ to the market yesterday."', options: ['go', 'goes', 'went', 'going'], answer: 'went', concept: 'Past tense', difficulty: 'medium', type: 'grammar' },
+        { question: 'Which sentence uses the present perfect correctly?', options: ['I have seen him yesterday.', 'I have seen him before.', 'I seen him before.', 'I had seen him today.'], answer: 'I have seen him before.', concept: 'Present perfect', difficulty: 'medium', type: 'grammar' },
+        { question: 'What does "persevere" mean?', options: ['Give up easily', 'Continue despite difficulties', 'Ask for help always', 'Study slowly'], answer: 'Continue despite difficulties', concept: 'Vocabulary', difficulty: 'medium', type: 'vocabulary' },
+      ];
+      setTestQuestions(fallbackQuestions);
+      setTestIdx(0);
+      setTestAnswers([]);
+      questionStartRef.current = Date.now();
+      setScreen('test');
+      showToast('Using offline test questions — AI is temporarily busy.', 'info');
     }
     setTestLoading(false);
   };
