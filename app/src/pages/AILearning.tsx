@@ -723,6 +723,55 @@ In this activity, you will practice **${activity}** as part of your ${milestone.
     setRevisionLoading(false);
   };
 
+  const handleBackToRoadmap = async () => {
+    if (!activeMilestone) return;
+    const isCompleted = completedMilestones.has(activeMilestone.id);
+    if (!isCompleted) {
+      const next = new Set(completedMilestones);
+      next.add(activeMilestone.id);
+      setCompletedMilestones(next);
+
+      const newXp = xp + 150;
+      setXp(newXp);
+
+      const ev = evaluation || {
+        score: 100,
+        masteryAchieved: true,
+        performance: 'excellent',
+        feedback: 'Proceeded to next step.',
+        weakConcepts: [],
+        strongConcepts: [],
+        mistakes: [],
+      };
+
+      const newProf = {
+        ...(profile || {}),
+        testHistory: [...(profile?.testHistory || []), { milestone: activeMilestone.title || '', score: ev.score, date: new Date().toISOString() }].slice(-20),
+      };
+      setProfile(newProf);
+
+      let rm = roadmap;
+      const updRes = await callAgent('roadmap-update', {
+        profile: newProf,
+        roadmap: serializeRoadmap(roadmap),
+        milestoneId: activeMilestone.id,
+        evaluation: ev,
+      });
+      if (updRes.ok && updRes.json?.milestones?.length) {
+        rm = updRes.json.milestones;
+        setRoadmap(rm);
+      }
+
+      await saveData(skillScores, rm, newXp, Array.from(next), newProf);
+      showToast(`Completed milestone: ${activeMilestone.title}!`, 'success');
+    }
+
+    setActiveMilestone(null);
+    setLessonContent(null);
+    setEvaluation(null);
+    setScreen('roadmap');
+  };
+
   if (loading) return (
     <div className="flex items-center justify-center h-64 text-slate-400">
       <BrainCircuit className="w-6 h-6 animate-pulse mr-2" /> Loading AI Learning...
@@ -1536,7 +1585,7 @@ In this activity, you will practice **${activity}** as part of your ${milestone.
             </button>
           )}
           <button
-            onClick={() => { setActiveMilestone(null); setLessonContent(null); setEvaluation(null); setScreen('roadmap'); }}
+            onClick={handleBackToRoadmap}
             className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-2xl shadow-sm transition-all text-sm flex items-center justify-center gap-2">
             <ArrowRight className="w-4 h-4" /> Back to Roadmap
           </button>
