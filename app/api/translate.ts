@@ -17,7 +17,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    const apiKey = process.env.GROQ_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY || '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';
     if (apiKey) {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',

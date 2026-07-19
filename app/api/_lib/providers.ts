@@ -122,7 +122,12 @@ async function callProvider(
   p: ProviderConfig,
   opts: GenerateOptions,
 ): Promise<{ ok: boolean; text?: string; status?: number; error?: string; retryable?: boolean }> {
-  const apiKey = process.env[p.apiKeyEnv];
+  const fallbackKeys: Record<string, string> = {
+    GROQ_API_KEY: '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',
+    OPENROUTER_API_KEY: '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',
+    NVIDIA_API_KEY: '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',
+  };
+  const apiKey = process.env[p.apiKeyEnv] || fallbackKeys[p.apiKeyEnv];
   if (!apiKey) return { ok: false, error: `${p.apiKeyEnv} not configured`, retryable: false };
 
   const controller = new AbortController();
