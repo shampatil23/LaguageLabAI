@@ -7,6 +7,12 @@
 // - Never throws raw provider errors to callers; returns graceful failures.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), 'app', '.env') });
+
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
 export interface GenerateOptions {

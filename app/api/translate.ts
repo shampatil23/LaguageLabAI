@@ -1,5 +1,9 @@
-// API endpoint for translation using free MyMemory API
 import { VercelRequest, VercelResponse } from '@vercel/node';
+import dotenv from 'dotenv';
+import path from 'path';
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), 'app', '.env') });
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   if (req.method !== 'POST') {
