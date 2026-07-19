@@ -1,69 +1,93 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-import dotenv from 'dotenv';
-import path from 'path';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.resolve(process.cwd(), 'app', '.env') });
+// Vercel serverless entry for translation.
+// POST /api/translate  { text, sourceLanguage?, targetLanguage }  ->  { translation: "..." }
+// Primary: Groq (when GROQ_API_KEY is configured). Fallback: MyMemory (free, no key).
+
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const UPSTREAM_TIMEOUT_MS = 20_000;
+
+async function safeJson(resp: Response): Promise<any | null> {
+  const ct = resp.headers.get('content-type') || '';
+  if (!ct.includes('application/json')) return null;
+  try { return await resp.json(); } catch { return null; }
+}
+
+function fetchWithTimeout(url: string, init: RequestInit, ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 export default async (req: VercelRequest, res: VercelResponse) => {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { text, sourceLanguage, targetLanguage } = req.body;
+  const body = typeof req.body === 'string' ? safeParse(req.body) : req.body;
+  const { text, sourceLanguage, targetLanguage } = body || {};
 
   if (!text || !targetLanguage) {
     return res.status(400).json({ error: 'Missing required parameters: text, targetLanguage' });
   }
 
-  try {
-    const apiKey = process.env.GROQ_API_KEY || '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';
-    if (apiKey) {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  // Primary provider: Groq (only when configured — no hardcoded fallback key)
+  const apiKey = process.env.GROQ_API_KEY;
+  if (apiKey) {
+    try {
+      const resp = await fetchWithTimeout(GROQ_URL, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: [
             {
               role: 'system',
-              content: 'You are a professional translator. Translate the text to the target language. Respond ONLY with the translated text. Do not add any introduction, explanations, or quotes.'
+              content: 'You are a professional translator. Translate the text to the target language. Respond ONLY with the translated text. Do not add any introduction, explanations, or quotes.',
             },
             {
               role: 'user',
-              content: `Translate the following text to language code "${targetLanguage}" (source language is "${sourceLanguage || 'auto'}"):\n\n${text}`
-            }
+              content: `Translate the following text to language code "${targetLanguage}" (source language is "${sourceLanguage || 'auto'}"):\n\n${text}`,
+            },
           ],
-          model: 'llama-3.3-70b-versatile',
-          temperature: 0.2
-        })
-      });
+          model: GROQ_MODEL,
+          temperature: 0.2,
+        }),
+      }, UPSTREAM_TIMEOUT_MS);
 
-      const data = await response.json();
-      const translatedText = data?.choices?.[0]?.message?.content?.trim();
-      if (response.ok && translatedText) {
-        return res.status(200).json({ translation: translatedText });
+      const data = await safeJson(resp);
+      const translated = data?.choices?.[0]?.message?.content?.trim();
+      if (resp.ok && translated) {
+        return res.status(200).json({ translation: translated });
       }
-      console.warn('Groq translation failed or returned empty, falling back to MyMemory', data);
+      console.warn('[translate] Groq failed, falling back to MyMemory', resp.status);
+    } catch (err) {
+      console.warn('[translate] Groq error, falling back to MyMemory', err);
     }
+  } else {
+    // Not configured — go straight to the fallback rather than failing.
+    console.warn('[translate] GROQ_API_KEY not configured, using MyMemory fallback');
+  }
 
-    // Fallback to MyMemory Translation API
+  // Fallback provider: MyMemory (free, no key required)
+  try {
     const sourceLang = sourceLanguage || 'en';
     const langPair = `${sourceLang}|${targetLanguage}`;
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${langPair}`;
-    
-    const fallbackResponse = await fetch(url);
-    const fallbackData = await fallbackResponse.json();
 
-    if (fallbackData.responseStatus === 200 && fallbackData.responseData) {
-      res.status(200).json({ translation: fallbackData.responseData.translatedText });
-    } else {
-      res.status(500).json({ error: 'Translation failed', details: fallbackData.responseDetails || 'Unknown error' });
+    const fb = await fetchWithTimeout(url, { method: 'GET' }, UPSTREAM_TIMEOUT_MS);
+    const fbData = await safeJson(fb);
+
+    if (fbData?.responseStatus === 200 && fbData.responseData) {
+      return res.status(200).json({ translation: fbData.responseData.translatedText });
     }
-  } catch (error) {
-    console.error('Translation API error:', error);
-    res.status(500).json({ error: 'An error occurred during translation.' });
+    return res.status(502).json({ error: 'Translation failed', details: fbData?.responseDetails || 'Unknown upstream error' });
+  } catch (err) {
+    console.error('[translate] fallback failed', err);
+    return res.status(502).json({ error: 'Could not reach translation service.' });
   }
 };
+
+function safeParse(s: string): any {
+  try { return JSON.parse(s); } catch { return null; }
+}

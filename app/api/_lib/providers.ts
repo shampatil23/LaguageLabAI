@@ -1,17 +1,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-provider AI layer
-// Chain: NVIDIA (primary) → OpenRouter (fallback) → Groq (fallback)
-// - API keys are read ONLY from server-side environment variables.
+// Chain: Groq → OpenRouter → NVIDIA (each tried in order, skipping any provider
+// whose key is not configured).
+// - API keys are read ONLY from server-side environment variables. No hardcoded
+//   fallback keys — committed keys get revoked by providers and mask config errors.
 // - Exponential backoff per provider, automatic provider switching.
 // - Response validation + JSON extraction/repair for structured outputs.
 // - Never throws raw provider errors to callers; returns graceful failures.
 // ─────────────────────────────────────────────────────────────────────────────
-
-import dotenv from 'dotenv';
-import path from 'path';
-
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-dotenv.config({ path: path.resolve(process.cwd(), 'app', '.env') });
 
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -122,12 +118,7 @@ async function callProvider(
   p: ProviderConfig,
   opts: GenerateOptions,
 ): Promise<{ ok: boolean; text?: string; status?: number; error?: string; retryable?: boolean }> {
-  const fallbackKeys: Record<string, string> = {
-    GROQ_API_KEY: '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',
-    OPENROUTER_API_KEY: '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',
-    NVIDIA_API_KEY: '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',
-  };
-  const apiKey = process.env[p.apiKeyEnv] || fallbackKeys[p.apiKeyEnv];
+  const apiKey = process.env[p.apiKeyEnv];
   if (!apiKey) return { ok: false, error: `${p.apiKeyEnv} not configured`, retryable: false };
 
   const controller = new AbortController();
