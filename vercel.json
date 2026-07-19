@@ -1,25 +1,15 @@
-{
+﻿{
   "buildCommand": "cd app && npm install && npm run build",
   "outputDirectory": "app/dist",
   "installCommand": "npm install",
   "framework": null,
+  "functions": {
+    "api/**/*.ts": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
-    {
-      "source": "/api/ai",
-      "destination": "/api/ai"
-    },
-    {
-      "source": "/api/chat",
-      "destination": "/api/chat"
-    },
-    {
-      "source": "/api/create-user",
-      "destination": "/api/create-user"
-    },
-    {
-      "source": "/api/translate",
-      "destination": "/api/translate"
-    },
     {
       "source": "/(.*)",
       "destination": "/index.html"
@@ -39,7 +29,7 @@
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type"
+          "value": "Content-Type,Authorization"
         }
       ]
     }
