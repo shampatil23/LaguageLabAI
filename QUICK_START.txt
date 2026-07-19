@@ -1,0 +1,98 @@
+﻿╔══════════════════════════════════════════════════════════════════════════════╗
+║                    VERCEL DEPLOYMENT - QUICK REFERENCE                       ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: SET ENVIRONMENT VARIABLES IN VERCEL                                  │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Go to: Vercel Dashboard → Your Project → Settings → Environment Variables
+
+Copy and paste these (one at a time):
+
+GROQ_API_KEY
+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
+
+VITE_GROQ_API_KEY
+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
+
+VITE_FIREBASE_API_KEY
+AIzaSyBG02A_z-cHkEOKCXqxnXHqOao0oXzAiJY
+
+VITE_FIREBASE_AUTH_DOMAIN
+languagelab-411df.firebaseapp.com
+
+VITE_FIREBASE_PROJECT_ID
+languagelab-411df
+
+VITE_FIREBASE_STORAGE_BUCKET
+languagelab-411df.firebasestorage.app
+
+VITE_FIREBASE_MESSAGING_SENDER_ID
+747245981807
+
+VITE_FIREBASE_APP_ID
+1:747245981807:web:1e58e8c729f9c05571bd9a
+
+Optional (backup providers):
+
+NVIDIA_API_KEY
+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
+
+OPENROUTER_API_KEY
+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
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: DEPLOY                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+Option A (Git Push - Recommended):
+  cd LaguageLabAI
+  git add .
+  git commit -m "Fix: Resolve network errors"
+  git push origin main
+
+Option B (Manual):
+  cd LaguageLabAI
+  vercel --prod
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: TEST                                                                 │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+After deployment, test:
+  ✓ Conversation Practice (chat)
+  ✓ Dictionary (translation)
+  ✓ AI Learning (assessments)
+  ✓ Check browser console (F12) for errors
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ WHAT WAS FIXED                                                               │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+✓ Replaced API wrapper files with standalone implementations
+✓ Fixed vercel.json configuration
+✓ Added proper TypeScript configuration
+✓ Improved CORS headers
+✓ Added error handling
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ FILES CREATED/MODIFIED                                                       │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+✓ api/ai.ts (14.9 KB) - Consolidated AI engine
+✓ api/chat.ts (2.4 KB) - Chat endpoint
+✓ api/translate.ts (2.6 KB) - Translation endpoint
+✓ api/create-user.ts (1.5 KB) - User creation
+✓ vercel.json - Updated configuration
+✓ tsconfig.json - Root TypeScript config
+✓ app/src/lib/apiConfig.ts - API helper
+
+Documentation:
+✓ FIX_SUMMARY.md - Quick overview
+✓ VERCEL_DEPLOYMENT_GUIDE.md - Detailed guide
+✓ DEPLOYMENT_FIX.md - Technical details
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                         STATUS: READY TO DEPLOY ✓                            ║
+╚══════════════════════════════════════════════════════════════════════════════╝
