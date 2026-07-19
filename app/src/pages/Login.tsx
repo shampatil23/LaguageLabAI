@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
@@ -147,7 +147,6 @@ export default function Login() {
           <div className="grid h-11 w-11 place-items-center rounded-xl bg-white/15 text-white ring-1 ring-white/25 backdrop-blur-sm">
             <Languages className="h-6 w-6" strokeWidth={2.2} />
           </div>
-          <span className="text-base font-semibold tracking-tight">Global States University</span>
         </motion.div>
 
         <motion.div {...entrance} transition={{ duration: 0.65, delay: 0.1 }} className="relative z-10 max-w-lg">
@@ -208,7 +207,6 @@ export default function Login() {
             </div>
             <div>
               <p className="text-sm text-[#6b7690]">Sign in to your account</p>
-              <p className="text-base font-semibold text-[#1a2340]">Global States University</p>
             </div>
           </div>
 
@@ -306,7 +304,7 @@ export default function Login() {
               {isSubmitting ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Signing in…
+                  Signing inâ€¦
                 </>
               ) : (
                 <>
@@ -388,7 +386,7 @@ export default function Login() {
               disabled={isResetting}
               className="mt-5 h-12 w-full rounded-xl bg-[#2b48c9] text-sm font-semibold text-white outline-none hover:bg-[#233ea8] focus-visible:ring-4 focus-visible:ring-[#2b48c9]/40 disabled:cursor-wait disabled:opacity-70"
             >
-              {isResetting ? 'Sending link…' : 'Send reset link'}
+              {isResetting ? 'Sending linkâ€¦' : 'Send reset link'}
             </button>
           </motion.form>
         </div>

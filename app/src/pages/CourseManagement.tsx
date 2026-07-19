@@ -7,7 +7,7 @@ import {
   Video, Mic, Monitor, Play, Square, Save, ArrowLeft, Type, Bold, Italic,
   Underline, AlignLeft, AlignCenter, AlignRight, Link, Image as ImageIcon,
   Undo, Redo, LayoutTemplate, BookOpen, CheckCircle, Clock, Lock, ClipboardList, GraduationCap,
-  PlayCircle, AlertCircle, Sparkles, ChevronRight, ChevronDown, CheckCircle2, Bot
+  PlayCircle, AlertCircle, Sparkles, ChevronRight, ChevronDown, CheckCircle2, Bot, X, Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { auth, database } from '../lib/firebase';
@@ -39,8 +39,7 @@ export default function CourseManagement() {
   const [courseTitle, setCourseTitle] = useState('');
   const [courseCode, setCourseCode] = useState('');
   const [courseContent, setCourseContent] = useState('');
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [driveUrl, setDriveUrl] = useState('');
+  const [resources, setResources] = useState<{ type: string; url: string; fileName?: string }[]>([]);
 
   // Form states for Lesson Studio
   const [targetCourseId, setTargetCourseId] = useState('');
@@ -53,8 +52,6 @@ export default function CourseManagement() {
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizScore, setQuizScore] = useState<number | null>(null);
-  const [showInfoOverlay, setShowInfoOverlay] = useState(false);
-  const overlayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -116,9 +113,6 @@ export default function CourseManagement() {
     setQuizAnswers({});
     setQuizSubmitted(false);
     setQuizScore(null);
-    setShowInfoOverlay(true);
-    if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
-    overlayTimerRef.current = setTimeout(() => setShowInfoOverlay(false), 3000);
   };
 
   const markLessonComplete = async () => {
@@ -189,13 +183,47 @@ export default function CourseManagement() {
   };
 
   const renderMedia = (url: string, type: string) => {
-    if (!url) return <div className="flex items-center justify-center h-full text-slate-400 text-sm">No video resource.</div>;
-    if (type === 'Video') {
+    if (!url) return <div className="flex items-center justify-center h-full text-slate-400 text-sm p-4 text-center">No resource URL provided.</div>;
+    const t = type?.toLowerCase();
+    // YouTube embed
+    if (t === 'youtube' || t === 'video') {
       const ytId = getYoutubeIdS(url);
       if (ytId) return <iframe className="w-full h-full rounded-none border-0" src={`https://www.youtube.com/embed/${ytId}`} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />;
       const driveId = getDriveIdS(url);
       if (driveId) return <iframe className="w-full h-full border-0" src={`https://drive.google.com/file/d/${driveId}/preview`} allow="autoplay" />;
-      return <video src={url} controls className="w-full h-full" />;
+      return <video src={url} controls className="w-full h-full bg-black" />;
+    }
+    // Google Drive
+    if (t === 'google drive' || t === 'drive') {
+      const driveId = getDriveIdS(url);
+      if (driveId) return <iframe className="w-full h-full border-0" src={`https://drive.google.com/file/d/${driveId}/preview`} allow="autoplay" />;
+      return <iframe src={url} className="w-full h-full border-0" title="Drive Content" />;
+    }
+    // PDF
+    if (t === 'pdf') {
+      return <iframe src={`${url}#toolbar=1&navpanes=1`} className="w-full h-full border-0" title="PDF Viewer" />;
+    }
+    // Document (non-PDF)
+    if (t === 'document') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-400">
+          <FileText className="w-10 h-10" />
+          <a href={url} target="_blank" rel="noopener noreferrer" className="text-indigo-400 text-xs underline">Open Document ↗</a>
+        </div>
+      );
+    }
+    // Image
+    if (t === 'image') {
+      return <img src={url} alt="Resource" className="w-full h-full object-contain" />;
+    }
+    // Audio
+    if (t === 'audio') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 bg-slate-800 rounded-lg p-6">
+          <Mic className="w-10 h-10 text-purple-400" />
+          <audio src={url} controls className="w-full" />
+        </div>
+      );
     }
     return <iframe src={url} className="w-full h-full border-0" title="Lesson Content" />;
   };
@@ -213,8 +241,7 @@ export default function CourseManagement() {
         title: courseTitle.trim(),
         code: courseCode.trim() || 'ENG101',
         content: courseContent.trim(),
-        youtubeUrl: youtubeUrl.trim(),
-        driveUrl: driveUrl.trim(),
+        resources: resources,
         createdBy: user.uid,
         status,
         createdAt: new Date().toISOString()
@@ -227,8 +254,7 @@ export default function CourseManagement() {
       setCourseTitle('');
       setCourseCode('');
       setCourseContent('');
-      setYoutubeUrl('');
-      setDriveUrl('');
+      setResources([]);
       setView('list');
     } catch (err) {
       console.error(err);
@@ -252,7 +278,7 @@ export default function CourseManagement() {
         name: lessonName.trim(),
         type: lessonType,
         sessionName: lessonUnit.trim() || 'Unit 1',
-        resourceUrl: youtubeUrl.trim() || driveUrl.trim() || '',
+        resources: resources,
         content: courseContent.trim(),
         createdAt: new Date().toISOString()
       };
@@ -264,8 +290,7 @@ export default function CourseManagement() {
       setLessonName('');
       setLessonUnit('Unit 1');
       setCourseContent('');
-      setYoutubeUrl('');
-      setDriveUrl('');
+      setResources([]);
       setView('list');
     } catch (err) {
       console.error(err);
@@ -288,8 +313,8 @@ export default function CourseManagement() {
       lessonsData[courseObj.id] = {
         id: courseObj.id,
         name: 'Introduction',
-        type: courseObj.youtubeUrl || courseObj.driveUrl ? 'Video' : 'HTML',
-        resourceUrl: courseObj.youtubeUrl || courseObj.driveUrl || '',
+        type: courseObj.resources?.length > 0 ? 'Video' : 'HTML', // Simple type detection
+        resources: courseObj.resources || [],
         content: courseObj.content || '',
         sessionName: 'Overview',
         status: 'Not Started'
@@ -302,7 +327,7 @@ export default function CourseManagement() {
             id: lesId,
             name: lesVal.name,
             type: lesVal.type || 'HTML',
-            resourceUrl: lesVal.resourceUrl || '',
+            resources: lesVal.resources || [],
             content: lesVal.content || '',
             sessionName: lesVal.sessionName || 'Lessons',
             status: 'Not Started',
@@ -459,25 +484,23 @@ export default function CourseManagement() {
                 <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#0d1117]">
                   {/* VIDEO / CONTENT AREA — stacked configuration, no overlap */}
                   <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                    {activeLesson.resourceUrl && (
-                      <div className="h-64 sm:h-80 md:h-[400px] w-full bg-black flex-shrink-0 relative flex items-center justify-center">
-                        {renderMedia(activeLesson.resourceUrl, activeLesson.type)}
+                    {activeLesson.resources && activeLesson.resources.length > 0 ? (
+                      <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+                        {activeLesson.resources.map((resource: any, index: number) => (
+                          <div key={index} className="h-64 sm:h-80 md:h-[400px] w-full bg-black flex-shrink-0 relative flex items-center justify-center mb-2">
+                            <h3 className="absolute top-2 left-2 bg-black/50 text-white text-xs p-1 rounded">{resource.type}</h3>
+                            {renderMedia(resource.url, resource.type)}
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    ) : null}
                     {activeLesson.content ? (
                       <div className="flex-1 overflow-y-auto border-t border-[#30363d] bg-[#0d1117]">
                         <div className="max-w-2xl mx-auto p-8 text-slate-100 text-lg md:text-xl font-medium leading-relaxed whitespace-pre-wrap select-text" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
                       </div>
-                    ) : !activeLesson.resourceUrl ? (
+                    ) : (!activeLesson.resources || activeLesson.resources.length === 0) ? (
                       <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">No content available.</div>
                     ) : null}
-
-                    {showInfoOverlay && (
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-end p-6 pointer-events-none z-10 transition-opacity">
-                        <span className="text-xs text-amber-400 font-bold uppercase tracking-widest mb-1">{activeLesson.type}</span>
-                        <h2 className="text-white text-xl font-black">{activeLesson.name}</h2>
-                      </div>
-                    )}
                   </div>
 
                   {/* POST-COMPLETION BANNER */}
@@ -693,55 +716,92 @@ export default function CourseManagement() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 flex-1 min-h-0">
           <div className="lg:col-span-4 flex flex-col gap-6">
             <Card className="flex flex-col flex-1 shadow-sm border-slate-200 overflow-hidden min-h-0">
-              <CardHeader className="bg-slate-50 border-b border-slate-100 py-3 shrink-0">
-                <CardTitle className="text-sm">Media resource & Links</CardTitle>
+              <CardHeader className="bg-slate-50 border-b border-slate-100 py-3 shrink-0 flex items-center justify-between">
+                <CardTitle className="text-sm">Media Resources</CardTitle>
+                <Button size="sm" variant="outline" onClick={() => setResources(prev => [...prev, { type: 'Video', url: '', fileName: '' }])}>
+                  <Plus className="w-3.5 h-3.5 mr-1.5" /> Add Resource
+                </Button>
               </CardHeader>
               <CardContent className="p-4 flex flex-col flex-1 gap-4 overflow-y-auto">
-                <div className="space-y-4 shrink-0">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">YouTube Link</label>
-                    <div className="relative">
+                <div className="space-y-4">
+                  {resources.map((resource, index) => (
+                    <div key={index} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <select
+                            value={resource.type}
+                            onChange={(e) => {
+                              const n = [...resources];
+                              n[index] = { ...n[index], type: e.target.value };
+                              setResources(n);
+                            }}
+                            className="h-8 px-2 text-xs rounded-lg border border-slate-200 focus:outline-none bg-white text-slate-700 font-semibold flex-shrink-0"
+                          >
+                            <option value="Video">🎬 Video (Direct)</option>
+                            <option value="YouTube">▶️ YouTube</option>
+                            <option value="Google Drive">📁 Google Drive</option>
+                            <option value="PDF">📄 PDF</option>
+                            <option value="Document">📝 Document</option>
+                            <option value="Image">🖼️ Image</option>
+                            <option value="Audio">🎵 Audio</option>
+                          </select>
+                          <span className="text-xs text-slate-500 font-semibold">Resource {index + 1}</span>
+                        </div>
+                        <button
+                          onClick={() => setResources(prev => prev.filter((_, i) => i !== index))}
+                          className="text-slate-400 hover:text-red-500 transition-colors p-1 rounded"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                       <input
                         type="text"
-                        placeholder="https://www.youtube.com/watch?v=..."
-                        value={youtubeUrl}
+                        placeholder={`Label / File name (optional)...`}
+                        value={resource.fileName || ''}
                         onChange={(e) => {
-                          setYoutubeUrl(e.target.value);
-                          if (e.target.value) setDriveUrl('');
+                          const n = [...resources];
+                          n[index] = { ...n[index], fileName: e.target.value };
+                          setResources(n);
                         }}
-                        className="w-full h-10 px-3 pl-9 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-700 bg-white"
+                        className="w-full h-8 px-3 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-600 bg-white placeholder:text-slate-300"
                       />
-                      <Video className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase">Google Drive Link</label>
-                    <div className="relative">
                       <input
                         type="text"
-                        placeholder="https://drive.google.com/file/d/.../preview"
-                        value={driveUrl}
+                        placeholder="Paste URL here..."
+                        value={resource.url}
                         onChange={(e) => {
-                          setDriveUrl(e.target.value);
-                          if (e.target.value) setYoutubeUrl('');
+                          const n = [...resources];
+                          n[index] = { ...n[index], url: e.target.value };
+                          setResources(n);
                         }}
-                        className="w-full h-10 px-3 pl-9 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-700 bg-white"
+                        className="w-full h-9 px-3 text-xs rounded-lg border border-slate-200 focus:outline-none focus:ring-1 focus:ring-primary-500 text-slate-700 bg-white font-mono placeholder:font-sans placeholder:text-slate-300"
                       />
-                      <Link className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                     </div>
-                  </div>
-                </div>
-
-                <div className="flex-1 bg-slate-900 rounded-lg relative overflow-hidden flex items-center justify-center mt-2 border border-slate-200 min-h-[220px]">
-                  {(youtubeUrl || driveUrl) ? (
-                    renderMedia(youtubeUrl || driveUrl, 'Video')
-                  ) : (
-                    <div className="text-slate-500 flex flex-col items-center gap-2 select-none">
-                      <Video className="w-8 h-8 opacity-20" />
-                      <span className="text-xs opacity-50 font-medium">No YouTube or Drive video preview</span>
+                  ))}
+                  {resources.length === 0 && (
+                    <div className="text-center py-6 border-2 border-dashed border-slate-200 rounded-xl">
+                      <Video className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-xs text-slate-400 font-medium">No resources yet</p>
+                      <p className="text-[10px] text-slate-300 mt-0.5">Click "Add Resource" to attach Video, PDF, Audio, Image, or Document</p>
                     </div>
                   )}
                 </div>
+
+                {resources.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-500 mb-2">Preview (first resource)</p>
+                    <div className="bg-slate-900 rounded-xl overflow-hidden border border-slate-200" style={{ minHeight: 200 }}>
+                      {resources[0].url ? (
+                        <div className="aspect-video">{renderMedia(resources[0].url, resources[0].type)}</div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center" style={{ minHeight: 200 }}>
+                          <Video className="w-8 h-8 text-slate-600 opacity-40" />
+                          <span className="text-xs text-slate-600 opacity-40 font-medium mt-2">Enter URL to preview</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -900,94 +960,94 @@ export default function CourseManagement() {
                   <Badge variant={course.status === 'Active' ? 'success' : 'warning'}>{course.status}</Badge>
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
-                  <Button
-                    onClick={() => { setAssigningCourse(course); setSelectedStudentIds([]); }}
-                    className="w-full text-xs font-bold h-9 bg-primary-600 text-white hover:bg-primary-700"
-                  >
-                    <Users className="w-4 h-4 mr-2" /> Assign Course
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+		<div className="mt-4 pt-4 border-t border-slate-100 flex gap-2">
+			<Button
+			onClick={() => { setAssigningCourse(course); setSelectedStudentIds([]); }}
+			className="w-full text-xs font-bold h-9 bg-primary-600 text-white hover:bg-primary-700"
+			>
+			<Users className="w-4 h-4 mr-2" /> Assign Course
+			</Button>
+		</div>
+		</CardContent>
+	</Card>
+	))}
+</div>
+)}
 
-      {/* Assign Student Modal with responsive scroll */}
-      {assigningCourse && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <Card className="max-w-md w-full bg-white shadow-2xl rounded-2xl border border-slate-100 overflow-hidden">
-            <CardHeader className="bg-slate-50 border-b border-slate-100 p-5">
-              <CardTitle className="text-base font-bold text-slate-800">Assign Course: {assigningCourse.title}</CardTitle>
-              <p className="text-xs text-slate-500 mt-1">Select students to assign this course for lifetime access.</p>
-            </CardHeader>
-            <CardContent className="p-5 space-y-4">
-              {teacherStudents.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-4 bg-slate-50 rounded-xl">No students assigned to you yet.</p>
-              ) : (
-                <div className="space-y-2">
-                  {/* Select All option */}
-                  <label className="flex items-center gap-3 p-3 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 cursor-pointer transition-all">
-                    <input
-                      type="checkbox"
-                      checked={selectedStudentIds.length === teacherStudents.length && teacherStudents.length > 0}
-                      ref={el => {
-                        if (el) el.indeterminate = selectedStudentIds.length > 0 && selectedStudentIds.length < teacherStudents.length;
-                      }}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedStudentIds(teacherStudents.map(s => s.id));
-                        } else {
-                          setSelectedStudentIds([]);
-                        }
-                      }}
-                      className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500"
-                    />
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold text-indigo-800">Select All Students</p>
-                      <p className="text-[10px] text-indigo-600">{teacherStudents.length} students in your class</p>
-                    </div>
-                  </label>
-                  <div className="max-h-52 overflow-y-auto space-y-2 pr-1">
-                    {teacherStudents.map(student => (
-                      <label key={student.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer transition-all">
-                        <input
-                          type="checkbox"
-                          checked={selectedStudentIds.includes(student.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedStudentIds(prev => [...prev, student.id]);
-                            } else {
-                              setSelectedStudentIds(prev => prev.filter(id => id !== student.id));
-                            }
-                          }}
-                          className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500 bg-white"
-                        />
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-slate-800 truncate">{student.name}</p>
-                          <p className="text-[10px] text-slate-500 truncate font-mono">{student.email}</p>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
+{/* Assign Student Modal with responsive scroll */}
+{assigningCourse && (
+<div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+	<Card className="max-w-md w-full bg-white shadow-2xl rounded-2xl border border-slate-100 overflow-hidden">
+	<CardHeader className="bg-slate-50 border-b border-slate-100 p-5">
+		<CardTitle className="text-base font-bold text-slate-800">Assign Course: {assigningCourse.title}</CardTitle>
+		<p className="text-xs text-slate-500 mt-1">Select students to assign this course for lifetime access.</p>
+	</CardHeader>
+	<CardContent className="p-5 space-y-4">
+		{teacherStudents.length === 0 ? (
+		<p className="text-xs text-slate-500 text-center py-4 bg-slate-50 rounded-xl">No students assigned to you yet.</p>
+		) : (
+		<div className="space-y-2">
+			{/* Select All option */}
+			<label className="flex items-center gap-3 p-3 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 cursor-pointer transition-all">
+			<input
+				type="checkbox"
+				checked={selectedStudentIds.length === teacherStudents.length && teacherStudents.length > 0}
+				ref={el => {
+				if (el) el.indeterminate = selectedStudentIds.length > 0 && selectedStudentIds.length < teacherStudents.length;
+				}}
+				onChange={(e) => {
+				if (e.target.checked) {
+					setSelectedStudentIds(teacherStudents.map(s => s.id));
+				} else {
+					setSelectedStudentIds([]);
+				}
+				}}
+				className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500"
+			/>
+			<div className="min-w-0">
+				<p className="text-sm font-bold text-indigo-800">Select All Students</p>
+				<p className="text-[10px] text-indigo-600">{teacherStudents.length} students in your class</p>
+			</div>
+			</label>
+			<div className="max-h-52 overflow-y-auto space-y-2 pr-1">
+			{teacherStudents.map(student => (
+				<label key={student.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:bg-slate-50 cursor-pointer transition-all">
+				<input
+					type="checkbox"
+					checked={selectedStudentIds.includes(student.id)}
+					onChange={(e) => {
+					if (e.target.checked) {
+						setSelectedStudentIds(prev => [...prev, student.id]);
+					} else {
+						setSelectedStudentIds(prev => prev.filter(id => id !== student.id));
+					}
+					}}
+					className="w-4 h-4 text-primary-600 rounded border-slate-350 focus:ring-primary-500 bg-white"
+				/>
+				<div className="min-w-0">
+					<p className="text-sm font-bold text-slate-800 truncate">{student.name}</p>
+					<p className="text-[10px] text-slate-500 truncate font-mono">{student.email}</p>
+				</div>
+				</label>
+			))}
+			</div>
+		</div>
+		)}
 
-              <div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
-                <Button variant="outline" onClick={() => setAssigningCourse(null)}>Cancel</Button>
-                <Button
-                  onClick={handleAssignCourse}
-                  disabled={loading || selectedStudentIds.length === 0}
-                  className="bg-primary-600 hover:bg-primary-700 text-white font-bold h-9 text-xs"
-                >
-                  {loading ? 'Assigning...' : `Assign to ${selectedStudentIds.length} Student${selectedStudentIds.length !== 1 ? 's' : ''}`}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
+		<div className="flex gap-3 justify-end pt-3 border-t border-slate-100">
+		<Button variant="outline" onClick={() => setAssigningCourse(null)}>Cancel</Button>
+		<Button
+			onClick={handleAssignCourse}
+			disabled={loading || selectedStudentIds.length === 0}
+			className="bg-primary-600 hover:bg-primary-700 text-white font-bold h-9 text-xs"
+		>
+			{loading ? 'Assigning...' : `Assign to ${selectedStudentIds.length} Student${selectedStudentIds.length !== 1 ? 's' : ''}`}
+		</Button>
+		</div>
+	</CardContent>
+	</Card>
+</div>
+)}
+</div>
+);
 }

@@ -1,9 +1,10 @@
-import { createServer as createViteServer } from "vite";
+﻿import { createServer as createViteServer } from "vite";
 import Groq from "groq-sdk";
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import express from "express";
 import path from "path";
+import { handleAiRequest } from "./api/_lib/handler";
 
 dotenv.config();
 
@@ -17,13 +18,36 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  // Vite middleware for development - MUST come before other middleware
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+      root: process.cwd(),
+      base: "/",
+    });
+    app.use(vite.middlewares);
+  }
+
+  app.use(express.json({ limit: "1mb" }));
+
+  // AI Learning Engine  multi-agent endpoint
+  app.post("/api/ai", async (req, res) => {
+    try {
+      const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() || req.ip || "unknown";
+      const { status, body } = await handleAiRequest(req.body, ip);
+      res.status(status).json(body);
+    } catch (e) {
+      console.error("[ai-engine] handler error", e);
+      res.status(500).json({ ok: false, error: "Something went wrong on our side. Please try again  your progress is saved." });
+    }
+  });
 
   // API Routes
   app.post("/api/chat", async (req, res) => {
     try {
       const { messages } = req.body;
-      const apiKey = process.env.GROQ_API_KEY || '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';
+      const apiKey = process.env.GROQ_API_KEY;
       if (!apiKey) {
         return res.status(500).json({ error: "GROQ_API_KEY is not configured on server" });
       }
@@ -138,14 +162,8 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
+  // Production static files
+  if (process.env.NODE_ENV === "production") {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
@@ -159,3 +177,4 @@ async function startServer() {
 }
 
 startServer();
+

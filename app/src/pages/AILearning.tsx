@@ -1,21 +1,41 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { cn } from '../lib/utils';
 import { auth, database } from '../lib/firebase';
 import { ref, onValue, set } from 'firebase/database';
+import { callAgent, mdToHtml } from '../lib/aiEngine';
 import {
   BrainCircuit, Star, Zap, Trophy, CheckCircle, XCircle, RotateCcw,
   Play, Lock, Flame, BookOpen, ArrowRight, Sparkles, Mic, Headphones,
   PenLine, Eye, MessageSquare, Target, TrendingUp, Award, ChevronLeft,
-  ChevronRight, Heart, Volume2, FileText, Users, Lightbulb, Clock
+  ChevronRight, Heart, Volume2, FileText, Users, Lightbulb, Clock, Send, Youtube
 } from 'lucide-react';
 
-// ─── DIAGNOSTIC QUESTIONS ─────────────────────────────────────────────────────
+// ─── ICON / SKILL METADATA ────────────────────────────────────────────────────
+
+const ICON_MAP: Record<string, any> = {
+  BookOpen, Mic, Volume2, PenLine, MessageSquare, Users, Zap, Lightbulb,
+  Target, Trophy, Eye, Headphones, Star, Award, Heart, FileText, Clock, BrainCircuit,
+};
+
+const SKILL_META: Record<string, { icon: any; color: string }> = {
+  Grammar: { icon: PenLine, color: 'from-blue-500 to-blue-700' },
+  Vocabulary: { icon: BookOpen, color: 'from-emerald-500 to-emerald-700' },
+  Reading: { icon: Eye, color: 'from-purple-500 to-purple-700' },
+  Listening: { icon: Headphones, color: 'from-amber-500 to-amber-700' },
+  Writing: { icon: PenLine, color: 'from-rose-500 to-rose-700' },
+  Speaking: { icon: Mic, color: 'from-indigo-500 to-indigo-700' },
+  Pronunciation: { icon: Volume2, color: 'from-teal-500 to-teal-700' },
+  Confidence: { icon: Heart, color: 'from-pink-500 to-pink-700' },
+  Communication: { icon: Users, color: 'from-orange-500 to-orange-700' },
+};
+
+// ─── STATIC DIAGNOSTIC (offline fallback only — AI generates fresh ones) ─────
 
 const DIAGNOSTIC: {
   skill: string;
   icon: any;
   color: string;
-  questions: { q: string; options: string[]; answer: string }[];
+  questions: { q: string; options: string[]; answer: string; concept?: string }[];
 }[] = [
     {
       skill: 'Grammar',
@@ -102,7 +122,7 @@ const DIAGNOSTIC: {
     },
   ];
 
-// ─── ROADMAP BUILDER ──────────────────────────────────────────────────────────
+// ─── ROADMAP TYPES + FALLBACK BUILDER ─────────────────────────────────────────
 
 type SkillScore = { skill: string; score: number; total: number; pct: number };
 
@@ -110,20 +130,34 @@ type Milestone = {
   id: string;
   title: string;
   desc: string;
-  icon: any;
+  icon?: any;
+  iconName?: string;
   color: string;
   tag: string;
   activities: string[];
+  focusConcepts?: string[];
+  reason?: string;
 };
+
+function milestoneIcon(m: Milestone) {
+  return m.icon || (m.iconName && ICON_MAP[m.iconName]) || Trophy;
+}
+
+/** Strip non-serializable fields before saving to Firebase. */
+function serializeRoadmap(rm: Milestone[]) {
+  return rm.map(({ icon, ...rest }) => ({ ...rest, iconName: rest.iconName || iconNameOf(icon) }));
+}
+function iconNameOf(icon: any): string {
+  for (const [name, comp] of Object.entries(ICON_MAP)) if (comp === icon) return name;
+  return 'Trophy';
+}
 
 function buildRoadmap(scores: SkillScore[]): Milestone[] {
   const weak = scores.filter(s => s.pct < 60).map(s => s.skill);
   const moderate = scores.filter(s => s.pct >= 60 && s.pct < 80).map(s => s.skill);
-  const strong = scores.filter(s => s.pct >= 80).map(s => s.skill);
 
   const milestones: Milestone[] = [];
 
-  // Always start with foundation if there are weak areas
   if (weak.includes('Grammar') || weak.includes('Vocabulary')) {
     milestones.push({
       id: 'foundation',
@@ -131,7 +165,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       desc: weak.includes('Grammar')
         ? 'Master sentence structure, tenses and core grammar rules'
         : 'Expand your word bank with essential English vocabulary',
-      icon: BookOpen,
+      iconName: 'BookOpen',
       color: 'from-blue-500 to-blue-600',
       tag: '🏗️ Foundation',
       activities: ['Grammar Drills', 'Flashcard Sets', 'Fill-in-the-blank Exercises', 'Mini Quiz', 'AI Practice Session'],
@@ -145,7 +179,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       desc: weak.includes('Pronunciation')
         ? 'Learn correct stress, intonation and sound formation'
         : 'Train your ear to understand natural English speech',
-      icon: Volume2,
+      iconName: 'Volume2',
       color: 'from-teal-500 to-teal-600',
       tag: '🎙️ Sound Skills',
       activities: ['Pronunciation Drills', 'Listening Exercises', 'Shadowing Practice', 'Dictation Tasks', 'AI Speaking Session'],
@@ -159,7 +193,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       desc: weak.includes('Confidence')
         ? 'Build the courage to speak English in any situation'
         : 'Develop fluency and naturalness in spoken English',
-      icon: Mic,
+      iconName: 'Mic',
       color: 'from-indigo-500 to-indigo-600',
       tag: '🗣️ Speaking',
       activities: ['Daily Speaking Tasks', 'Role Play Scenarios', 'Self-introduction Practice', 'Feedback Sessions', 'AI Conversation'],
@@ -173,7 +207,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       desc: weak.includes('Writing')
         ? 'Learn to write clearly from emails to essays'
         : 'Improve speed and understanding of English texts',
-      icon: PenLine,
+      iconName: 'PenLine',
       color: 'from-rose-500 to-rose-600',
       tag: '✍️ Literacy',
       activities: ['Reading Passages', 'Summary Writing', 'Email Drafting', 'Paragraph Practice', 'Comprehension Quiz'],
@@ -185,20 +219,19 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       id: 'communication',
       title: 'Communication Skills',
       desc: 'Master professional and social communication in English',
-      icon: MessageSquare,
+      iconName: 'MessageSquare',
       color: 'from-orange-500 to-orange-600',
       tag: '💬 Communication',
       activities: ['Group Discussion Simulation', 'Active Listening Exercises', 'Email Writing', 'Meeting Vocabulary', 'AI Dialogue Practice'],
     });
   }
 
-  // Moderate areas — improvement modules
   if (moderate.includes('Speaking') && !weak.includes('Speaking')) {
     milestones.push({
       id: 'fluency',
       title: 'Fluency Builder',
       desc: 'Push your speaking from good to great with advanced practice',
-      icon: Zap,
+      iconName: 'Zap',
       color: 'from-yellow-500 to-yellow-600',
       tag: '⚡ Fluency',
       activities: ['Timed Speaking Challenges', 'Story Narration', 'Debate Practice', 'Presentation Skills', 'AI Interview Mock'],
@@ -210,21 +243,20 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
       id: 'vocab_adv',
       title: 'Advanced Vocabulary',
       desc: 'Learn idioms, phrasal verbs and professional vocabulary',
-      icon: Lightbulb,
+      iconName: 'Lightbulb',
       color: 'from-emerald-500 to-emerald-600',
       tag: '💡 Vocabulary+',
       activities: ['Idiom Cards', 'Phrasal Verb Drills', 'Business English', 'Word-in-Context Exercises', 'Vocabulary Quiz'],
     });
   }
 
-  // Always end with professional readiness if confidence/communication are not weak
   const hasWeakConfOrComm = weak.includes('Confidence') || weak.includes('Communication');
   if (!hasWeakConfOrComm) {
     milestones.push({
       id: 'public_speaking',
       title: 'Public Speaking & Presentations',
       desc: 'Transform into a confident English speaker for any audience',
-      icon: Users,
+      iconName: 'Users',
       color: 'from-purple-500 to-purple-600',
       tag: '🎤 Public Speaking',
       activities: ['Presentation Delivery', 'Audience Q&A Practice', 'Group Discussion', 'TED-style Speech', 'AI Panel Simulation'],
@@ -235,20 +267,19 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
     id: 'interview',
     title: 'Interview & Career Readiness',
     desc: 'Prepare for HR rounds, group discussions and job interviews',
-    icon: Trophy,
+    iconName: 'Trophy',
     color: 'from-amber-500 to-amber-600',
     tag: '🏆 Placement Ready',
     activities: ['HR Interview Practice', 'Group Discussion', 'Mock Interview', 'Body Language Tips', 'Final AI Assessment'],
   });
 
-  // If all strong — premium track
   if (weak.length === 0 && moderate.length <= 1) {
     return [
       {
         id: 'public_speaking_adv',
         title: 'Public Speaking Mastery',
         desc: 'You have strong English! Now master public speaking',
-        icon: Mic,
+        iconName: 'Mic',
         color: 'from-indigo-500 to-indigo-700',
         tag: '🎤 Advanced',
         activities: ['Keynote Delivery', 'Impromptu Speaking', 'Debate Club', 'TED-style Presentation', 'AI Feedback Session'],
@@ -257,7 +288,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
         id: 'group_discussion',
         title: 'Group Discussion & Debate',
         desc: 'Lead discussions and influence through language',
-        icon: Users,
+        iconName: 'Users',
         color: 'from-purple-500 to-purple-700',
         tag: '💬 Leadership',
         activities: ['Hot Topic Discussions', 'Counter-Argument Training', 'Mediation Skills', 'Team Communication', 'AI Group Simulation'],
@@ -266,7 +297,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
         id: 'mock_interview_adv',
         title: 'Mock Interviews',
         desc: 'Practice real HR and technical interview scenarios',
-        icon: Target,
+        iconName: 'Target',
         color: 'from-rose-500 to-rose-700',
         tag: '🎯 Interview Prep',
         activities: ['Behavioral Questions', 'STAR Method Practice', 'Technical Communication', 'Salary Negotiation Language', 'Final AI Mock'],
@@ -275,7 +306,7 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
         id: 'placement_ready',
         title: 'Placement Readiness',
         desc: 'Final polish: professional English for any corporate role',
-        icon: Trophy,
+        iconName: 'Trophy',
         color: 'from-amber-500 to-amber-700',
         tag: '🏆 Placement',
         activities: ['HR Interview Practice', 'Campus Placement Simulation', 'Email & Report Writing', 'Presentation', 'Placement Score Test'],
@@ -286,16 +317,27 @@ function buildRoadmap(scores: SkillScore[]): Milestone[] {
   return milestones;
 }
 
+// ─── TEST TYPES ───────────────────────────────────────────────────────────────
+
+type TestQuestion = {
+  question: string; options: string[]; answer: string;
+  difficulty?: string; type?: string; concept?: string; explanation?: string;
+};
+
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export default function AILearning() {
-  type Screen = 'home' | 'diagnostic' | 'results' | 'roadmap' | 'milestone';
+  type Screen = 'home' | 'diagnostic' | 'results' | 'roadmap' | 'milestone' | 'test' | 'testResult';
   const [screen, setScreen] = useState<Screen>('home');
   const [diagSkillIdx, setDiagSkillIdx] = useState(0);
   const [diagQIdx, setDiagQIdx] = useState(0);
   const [diagAnswers, setDiagAnswers] = useState<Record<string, Record<number, string>>>({});
+  const [diagSections, setDiagSections] = useState(DIAGNOSTIC);
+  const [diagLoading, setDiagLoading] = useState(false);
   const [skillScores, setSkillScores] = useState<SkillScore[]>([]);
   const [roadmap, setRoadmap] = useState<Milestone[]>([]);
+  const [roadmapLoading, setRoadmapLoading] = useState(false);
+  const [profile, setProfile] = useState<any>(null);
   const [completedMilestones, setCompletedMilestones] = useState<Set<string>>(new Set());
   const [activeMilestone, setActiveMilestone] = useState<Milestone | null>(null);
   const [activeActivityIdx, setActiveActivityIdx] = useState(0);
@@ -309,6 +351,26 @@ export default function AILearning() {
   // AI Lesson state
   const [lessonContent, setLessonContent] = useState<string | null>(null);
   const [lessonLoading, setLessonLoading] = useState(false);
+  // AI Tutor state
+  const [tutorMessages, setTutorMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [tutorInput, setTutorInput] = useState('');
+  const [tutorLoading, setTutorLoading] = useState(false);
+  // Enrichment resources
+  const [enrichment, setEnrichment] = useState<any>(null);
+  const [enrichmentLoading, setEnrichmentLoading] = useState(false);
+  // Test state
+  const [testQuestions, setTestQuestions] = useState<TestQuestion[]>([]);
+  const [testIdx, setTestIdx] = useState(0);
+  const [testAnswers, setTestAnswers] = useState<{ answer: string; timeSec: number }[]>([]);
+  const [testLoading, setTestLoading] = useState(false);
+  const [evaluation, setEvaluation] = useState<any>(null);
+  const [evalLoading, setEvalLoading] = useState(false);
+  // Revision
+  const [revisionContent, setRevisionContent] = useState<string | null>(null);
+  const [revisionLoading, setRevisionLoading] = useState(false);
+
+  const questionStartRef = useRef<number>(Date.now());
+  const diagTimesRef = useRef<Record<string, Record<number, number>>>({});
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
     setToast({ message, type });
@@ -325,8 +387,9 @@ export default function AILearning() {
           if (d.streak) setStreak(d.streak);
           if (d.skillScores) setSkillScores(d.skillScores);
           if (d.roadmap) setRoadmap(d.roadmap);
+          if (d.profile) setProfile(d.profile);
           if (d.completedMilestones) setCompletedMilestones(new Set(d.completedMilestones));
-          if (d.skillScores && d.skillScores.length > 0) setScreen('roadmap');
+          if (d.skillScores && d.skillScores.length > 0) setScreen(s => (s === 'home' ? 'roadmap' : s));
         }
         setLoading(false);
       });
@@ -337,26 +400,121 @@ export default function AILearning() {
     return () => unsub();
   }, []);
 
-  const saveData = async (scores: SkillScore[], rm: Milestone[], newXp: number, completed: string[]) => {
+  const saveData = async (
+    scores: SkillScore[], rm: Milestone[], newXp: number, completed: string[], prof: any = profile,
+  ) => {
     const user = auth.currentUser;
     if (!user) return;
-    await set(ref(database, `users/${user.uid}/aiLearning`), {
-      skillScores: scores,
-      roadmap: rm,
-      xp: newXp,
-      streak,
-      completedMilestones: completed,
-      lastActive: new Date().toISOString(),
+    try {
+      await set(ref(database, `users/${user.uid}/aiLearning`), {
+        skillScores: scores,
+        roadmap: serializeRoadmap(rm),
+        xp: newXp,
+        streak,
+        profile: prof ?? null,
+        completedMilestones: completed,
+        lastActive: new Date().toISOString(),
+      });
+      const weakAreas = (prof?.weakTopics?.length ? prof.weakTopics : scores.filter(s => s.pct < 60).map(s => s.skill)).join(', ');
+      await set(ref(database, `users/${user.uid}/weakAreas`), weakAreas || 'None');
+      await set(ref(database, `users/${user.uid}/placementReadiness`),
+        prof?.overallScore ?? (scores.length ? Math.round(scores.reduce((a, s) => a + s.pct, 0) / scores.length) : 0));
+    } catch (e) {
+      console.error('Failed to save learning data', e);
+    }
+  };
+
+  // ── Diagnostic: AI-generated fresh assessment (static fallback) ───────────
+  const startDiagnostic = async () => {
+    setDiagSkillIdx(0); setDiagQIdx(0); setDiagAnswers({});
+    diagTimesRef.current = {};
+    setDiagLoading(true);
+    setScreen('diagnostic');
+    const res = await callAgent('diagnostic-generate', { profile });
+    if (res.ok && res.json?.sections) {
+      const sections = res.json.sections
+        .filter((s: any) => SKILL_META[s.skill] || s.skill)
+        .map((s: any) => ({
+          skill: s.skill,
+          icon: SKILL_META[s.skill]?.icon || BrainCircuit,
+          color: SKILL_META[s.skill]?.color || 'from-indigo-500 to-indigo-700',
+          questions: s.questions.map((q: any) => ({
+            q: q.question, options: q.options, answer: q.answer, concept: q.concept,
+          })),
+        }));
+      if (sections.length >= 3) setDiagSections(sections);
+      else setDiagSections(DIAGNOSTIC);
+    } else {
+      setDiagSections(DIAGNOSTIC);
+      if (res.error) showToast('Using standard assessment (AI is busy).', 'info');
+    }
+    questionStartRef.current = Date.now();
+    setDiagLoading(false);
+  };
+
+  const finishDiagnostic = async (newAnswers: Record<string, Record<number, string>>) => {
+    const scores: SkillScore[] = diagSections.map(sec => {
+      const ans = newAnswers[sec.skill] || {};
+      const correct = sec.questions.filter((q, i) => ans[i] === q.answer).length;
+      return {
+        skill: sec.skill,
+        score: correct,
+        total: sec.questions.length,
+        pct: Math.round((correct / sec.questions.length) * 100),
+      };
     });
-    // Save weak skills summary to user profile
-    const weakAreas = scores.filter(s => s.pct < 60).map(s => s.skill).join(', ');
-    await set(ref(database, `users/${user.uid}/weakAreas`), weakAreas || 'None');
-    await set(ref(database, `users/${user.uid}/placementReadiness`),
-      Math.round(scores.reduce((a, s) => a + s.pct, 0) / scores.length));
+    const newXp = xp + 100;
+    setSkillScores(scores);
+    setXp(newXp);
+    setScreen('results');
+
+    // AI: deep evaluation → learner profile → personalized roadmap
+    setRoadmapLoading(true);
+    const results = diagSections.map(sec => ({
+      skill: sec.skill,
+      questions: sec.questions.map((q, i) => ({
+        question: q.q,
+        concept: (q as any).concept,
+        correctAnswer: q.answer,
+        studentAnswer: (newAnswers[sec.skill] || {})[i] ?? null,
+        correct: (newAnswers[sec.skill] || {})[i] === q.answer,
+        timeSec: diagTimesRef.current[sec.skill]?.[i] ?? null,
+      })),
+    }));
+
+    let prof = profile;
+    const evalRes = await callAgent('diagnostic-evaluate', { profile, results });
+    if (evalRes.ok && evalRes.json?.profile) {
+      prof = { ...(profile || {}), ...evalRes.json.profile };
+      setProfile(prof);
+    } else {
+      prof = {
+        ...(profile || {}),
+        overallScore: Math.round(scores.reduce((a, s) => a + s.pct, 0) / scores.length),
+        weakTopics: scores.filter(s => s.pct < 60).map(s => s.skill),
+        strongTopics: scores.filter(s => s.pct >= 80).map(s => s.skill),
+      };
+      setProfile(prof);
+    }
+
+    let rm: Milestone[];
+    const rmRes = await callAgent('roadmap-generate', { profile: prof });
+    if (rmRes.ok && rmRes.json?.milestones?.length) {
+      rm = rmRes.json.milestones;
+    } else {
+      rm = buildRoadmap(scores);
+    }
+    setRoadmap(rm);
+    setRoadmapLoading(false);
+    await saveData(scores, rm, newXp, Array.from(completedMilestones), prof);
   };
 
   const handleDiagAnswer = (answer: string) => {
-    const skill = DIAGNOSTIC[diagSkillIdx];
+    const skill = diagSections[diagSkillIdx];
+    const timeSec = Math.round((Date.now() - questionStartRef.current) / 1000);
+    diagTimesRef.current[skill.skill] = { ...(diagTimesRef.current[skill.skill] || {}), [diagQIdx]: timeSec };
+    questionStartRef.current = Date.now();
+
     const newAnswers = {
       ...diagAnswers,
       [skill.skill]: { ...(diagAnswers[skill.skill] || {}), [diagQIdx]: answer }
@@ -364,7 +522,7 @@ export default function AILearning() {
     setDiagAnswers(newAnswers);
 
     const hasMoreQ = diagQIdx < skill.questions.length - 1;
-    const hasMoreSkill = diagSkillIdx < DIAGNOSTIC.length - 1;
+    const hasMoreSkill = diagSkillIdx < diagSections.length - 1;
 
     if (hasMoreQ) {
       setDiagQIdx(q => q + 1);
@@ -372,76 +530,180 @@ export default function AILearning() {
       setDiagSkillIdx(s => s + 1);
       setDiagQIdx(0);
     } else {
-      // Calculate scores
-      const scores: SkillScore[] = DIAGNOSTIC.map(sec => {
-        const ans = newAnswers[sec.skill] || {};
-        const correct = sec.questions.filter((q, i) => ans[i] === q.answer).length;
-        return {
-          skill: sec.skill,
-          score: correct,
-          total: sec.questions.length,
-          pct: Math.round((correct / sec.questions.length) * 100),
-        };
-      });
-      const rm = buildRoadmap(scores);
-      const newXp = xp + 100;
-      setSkillScores(scores);
-      setRoadmap(rm);
-      setXp(newXp);
-      saveData(scores, rm, newXp, Array.from(completedMilestones));
-      setScreen('results');
+      finishDiagnostic(newAnswers);
     }
   };
 
-  const handleCompleteMilestone = async (milestone: Milestone) => {
-    const next = new Set(completedMilestones);
-    next.add(milestone.id);
-    setCompletedMilestones(next);
-    const newXp = xp + 150;
-    setXp(newXp);
-    await saveData(skillScores, roadmap, newXp, Array.from(next));
-    setActiveMilestone(null);
-    setLessonContent(null);
-    showToast(`🏆 Milestone "${milestone.title}" Completed! +150 XP earned!`, 'success');
-    setScreen('roadmap');
-  };
-
+  // ── Lesson generation (Agent 4) + enrichment (Agent 5) ───────────────────
   const generateLesson = async (activity: string, milestone: Milestone) => {
     setLessonContent(null);
     setLessonLoading(true);
-    try {
-      const prompt = `You are an expert English language teacher. Generate a short, engaging lesson for a student working on "${milestone.title}" (skill area: ${milestone.tag}). 
-
-The lesson is about: "${activity}"
-
-Generate a structured lesson with:
-1. A brief concept explanation (2-3 sentences)
-2. 2-3 worked examples
-3. A quick practice exercise (1-2 items with answers)
-
-Keep it concise, educational, and motivating. Use markdown formatting with ## for sections, **bold** for key terms, and bullet points.`;
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [
-            { role: 'system', content: 'You are an expert English language teacher generating concise, educational lessons.' },
-            { role: 'user', content: prompt }
-          ]
-        }),
-      });
-      const data = await response.json();
-      if (response.ok && data.result) {
-        setLessonContent(data.result);
-      } else {
-        setLessonContent(`## ${activity}\n\nPractice this activity carefully. Focus on the core concepts and apply them step by step. Review your teacher's materials and try the exercises in your curriculum.`);
-      }
-    } catch {
-      setLessonContent(`## ${activity}\n\nPractice this activity with your teacher's guidance. Focus on understanding the core concepts and applying them regularly.`);
-    } finally {
-      setLessonLoading(false);
+    setTutorMessages([]);
+    const res = await callAgent('lesson-generate', { profile, milestone: { title: milestone.title, desc: milestone.desc, tag: milestone.tag, focusConcepts: milestone.focusConcepts }, activity });
+    if (res.ok && res.text) {
+      setLessonContent(res.text);
+    } else {
+      setLessonContent(`## ${activity}\n\n${res.error || 'Practice this activity carefully. Focus on the core concepts and apply them step by step.'}`);
     }
+    setLessonLoading(false);
+  };
+
+  const loadEnrichment = async (milestone: Milestone) => {
+    setEnrichment(null);
+    setEnrichmentLoading(true);
+    const res = await callAgent('enrichment-generate', { profile, milestone: { title: milestone.title, desc: milestone.desc, tag: milestone.tag } });
+    if (res.ok && res.json) setEnrichment(res.json);
+    setEnrichmentLoading(false);
+  };
+
+  const openMilestone = (milestone: Milestone) => {
+    setActiveMilestone(milestone);
+    setActiveActivityIdx(0);
+    setRevisionContent(null);
+    setScreen('milestone');
+    generateLesson(milestone.activities[0], milestone);
+    loadEnrichment(milestone);
+  };
+
+  const changeActivity = (milestone: Milestone, idx: number) => {
+    setActiveActivityIdx(idx);
+    generateLesson(milestone.activities[idx], milestone);
+  };
+
+  // ── Interactive tutor (Agent 4b) ──────────────────────────────────────────
+  const askTutor = async (question: string) => {
+    if (!question.trim() || tutorLoading || !activeMilestone) return;
+    const history = tutorMessages;
+    setTutorMessages(m => [...m, { role: 'user', content: question }]);
+    setTutorInput('');
+    setTutorLoading(true);
+    const res = await callAgent('tutor-chat', {
+      profile,
+      milestone: { title: activeMilestone.title, desc: activeMilestone.desc },
+      lessonContent: lessonContent || '',
+      history,
+      question,
+    });
+    setTutorMessages(m => [...m, {
+      role: 'assistant',
+      content: res.ok && res.text ? res.text : (res.error || 'Sorry, I could not answer right now. Please try again.'),
+    }]);
+    setTutorLoading(false);
+  };
+
+  // ── Mastery test flow (Agents 6, 7, 8) ────────────────────────────────────
+  const startTest = async () => {
+    if (!activeMilestone) return;
+    setTestLoading(true);
+    setEvaluation(null);
+    const res = await callAgent('test-generate', {
+      profile,
+      milestone: { title: activeMilestone.title, desc: activeMilestone.desc, focusConcepts: activeMilestone.focusConcepts },
+    });
+    if (res.ok && res.json?.questions?.length) {
+      setTestQuestions(res.json.questions);
+      setTestIdx(0);
+      setTestAnswers([]);
+      questionStartRef.current = Date.now();
+      setScreen('test');
+    } else {
+      showToast(res.error || 'Could not generate the test. Please try again.', 'info');
+    }
+    setTestLoading(false);
+  };
+
+  const handleTestAnswer = async (answer: string) => {
+    const timeSec = Math.round((Date.now() - questionStartRef.current) / 1000);
+    questionStartRef.current = Date.now();
+    const answers = [...testAnswers, { answer, timeSec }];
+    setTestAnswers(answers);
+
+    if (testIdx < testQuestions.length - 1) {
+      setTestIdx(i => i + 1);
+      return;
+    }
+
+    // All answered → deep evaluation
+    setEvalLoading(true);
+    setScreen('testResult');
+    const results = testQuestions.map((q, i) => ({
+      question: q.question,
+      concept: q.concept,
+      difficulty: q.difficulty,
+      type: q.type,
+      correctAnswer: q.answer,
+      studentAnswer: answers[i]?.answer ?? null,
+      correct: answers[i]?.answer === q.answer,
+      timeSec: answers[i]?.timeSec ?? null,
+    }));
+    const evalRes = await callAgent('test-evaluate', {
+      profile,
+      milestone: activeMilestone ? { title: activeMilestone.title } : undefined,
+      results,
+    });
+
+    let ev = evalRes.ok && evalRes.json ? evalRes.json : null;
+    if (!ev) {
+      const correct = results.filter(r => r.correct).length;
+      const score = Math.round((correct / results.length) * 100);
+      ev = {
+        score,
+        masteryAchieved: score >= 70,
+        performance: score >= 85 ? 'excellent' : score >= 60 ? 'average' : 'poor',
+        feedback: score >= 70 ? 'Great work! You passed this milestone test.' : 'Keep practicing — review the lesson and try again.',
+        weakConcepts: [], strongConcepts: [], mistakes: [],
+      };
+    }
+    setEvaluation(ev);
+
+    // Update learner profile memory
+    const newProf = {
+      ...(profile || {}),
+      confidence: ev.confidence ?? profile?.confidence,
+      weakTopics: Array.from(new Set([...(ev.weakConcepts || []), ...((profile?.weakTopics || []).filter((t: string) => !(ev.strongConcepts || []).includes(t)))])).slice(0, 12),
+      strongTopics: Array.from(new Set([...(profile?.strongTopics || []), ...(ev.strongConcepts || [])])).slice(0, 12),
+      mistakeHistory: [...(profile?.mistakeHistory || []), ...(ev.mistakes || [])].slice(-20),
+      testHistory: [...(profile?.testHistory || []), { milestone: activeMilestone?.title || '', score: ev.score, date: new Date().toISOString() }].slice(-20),
+    };
+    setProfile(newProf);
+
+    if (ev.masteryAchieved && activeMilestone) {
+      // Complete milestone + adaptive roadmap update
+      const next = new Set(completedMilestones);
+      next.add(activeMilestone.id);
+      setCompletedMilestones(next);
+      const newXp = xp + 150;
+      setXp(newXp);
+
+      let rm = roadmap;
+      const updRes = await callAgent('roadmap-update', {
+        profile: newProf,
+        roadmap: serializeRoadmap(roadmap),
+        milestoneId: activeMilestone.id,
+        evaluation: ev,
+      });
+      if (updRes.ok && updRes.json?.milestones?.length) {
+        rm = updRes.json.milestones;
+        setRoadmap(rm);
+        if (updRes.json.summary) showToast(`🗺️ ${updRes.json.summary}`, 'info');
+      }
+      await saveData(skillScores, rm, newXp, Array.from(next), newProf);
+    } else {
+      await saveData(skillScores, roadmap, xp, Array.from(completedMilestones), newProf);
+    }
+    setEvalLoading(false);
+  };
+
+  // ── Revision (Agent 9) ────────────────────────────────────────────────────
+  const generateRevision = async () => {
+    if (!activeMilestone || revisionLoading) return;
+    setRevisionLoading(true);
+    const res = await callAgent('revision-generate', {
+      profile,
+      milestone: { title: activeMilestone.title, desc: activeMilestone.desc, focusConcepts: activeMilestone.focusConcepts },
+    });
+    setRevisionContent(res.ok && res.text ? res.text : (res.error || 'Revision material unavailable right now.'));
+    setRevisionLoading(false);
   };
 
   if (loading) return (
@@ -450,9 +712,9 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
     </div>
   );
 
-  const totalDiagQ = DIAGNOSTIC.reduce((a, s) => a + s.questions.length, 0);
-  const answeredQ = DIAGNOSTIC.slice(0, diagSkillIdx).reduce((a, s) => a + s.questions.length, 0) + diagQIdx;
-  const diagProgress = Math.round((answeredQ / totalDiagQ) * 100);
+  const totalDiagQ = diagSections.reduce((a, s) => a + s.questions.length, 0);
+  const answeredQ = diagSections.slice(0, diagSkillIdx).reduce((a, s) => a + s.questions.length, 0) + diagQIdx;
+  const diagProgress = totalDiagQ ? Math.round((answeredQ / totalDiagQ) * 100) : 0;
 
   // Global toast
   const ToastEl = toast ? (
@@ -512,12 +774,12 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
 
         <div className="flex flex-col items-center gap-3">
           <button
-            onClick={() => { setScreen('diagnostic'); setDiagSkillIdx(0); setDiagQIdx(0); setDiagAnswers({}); }}
+            onClick={startDiagnostic}
             className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold px-8 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all hover:scale-[1.02] text-sm w-full justify-center"
           >
             <Sparkles className="w-5 h-5" /> Start English Diagnostic Assessment
           </button>
-          <p className="text-xs text-slate-400">~5 minutes · {totalDiagQ} questions · Instant personalised roadmap</p>
+          <p className="text-xs text-slate-400">~5 minutes · AI-generated questions · Instant personalised roadmap</p>
           {skillScores.length > 0 && (
             <button
               onClick={() => setScreen('roadmap')}
@@ -533,7 +795,18 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
 
   // ── DIAGNOSTIC ────────────────────────────────────────────────────────────
   if (screen === 'diagnostic') {
-    const section = DIAGNOSTIC[diagSkillIdx];
+    if (diagLoading) {
+      return (
+        <div className="max-w-xl mx-auto py-16 px-2 text-center space-y-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl flex items-center justify-center mx-auto shadow-xl animate-pulse">
+            <Sparkles className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">Preparing your assessment...</h2>
+          <p className="text-sm text-slate-500">Our AI teacher is writing fresh questions just for you.</p>
+        </div>
+      );
+    }
+    const section = diagSections[diagSkillIdx];
     const q = section.questions[diagQIdx];
     const Icon = section.icon;
 
@@ -561,7 +834,7 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
             <Icon className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Skill {diagSkillIdx + 1} of {DIAGNOSTIC.length}</p>
+            <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">Skill {diagSkillIdx + 1} of {diagSections.length}</p>
             <p className="font-black text-base">{section.skill}</p>
           </div>
         </div>
@@ -591,23 +864,23 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
   // ── RESULTS ───────────────────────────────────────────────────────────────
   if (screen === 'results') {
     const weak = skillScores.filter(s => s.pct < 60);
-    const moderate = skillScores.filter(s => s.pct >= 60 && s.pct < 80);
-    const strong = skillScores.filter(s => s.pct >= 80);
-    const overall = Math.round(skillScores.reduce((a, s) => a + s.pct, 0) / skillScores.length);
+    const overall = profile?.overallScore ?? Math.round(skillScores.reduce((a, s) => a + s.pct, 0) / skillScores.length);
 
     return (
       <div className="max-w-xl mx-auto space-y-6 py-4 px-2">
         <div className="text-center space-y-2">
           <div className="text-5xl font-black text-indigo-600">{overall}%</div>
           <h2 className="text-xl font-black text-slate-900">Your Assessment Results</h2>
-          <p className="text-slate-500 text-sm">Based on your results, we've built your personalized learning roadmap.</p>
+          <p className="text-slate-500 text-sm">
+            {profile?.analysis || "Based on your results, we've built your personalized learning roadmap."}
+          </p>
         </div>
 
         {/* Score Cards */}
         <div className="grid grid-cols-1 gap-2">
           {skillScores.map(s => {
-            const sec = DIAGNOSTIC.find(d => d.skill === s.skill)!;
-            const Icon = sec.icon;
+            const meta = SKILL_META[s.skill] || { icon: BrainCircuit };
+            const Icon = meta.icon;
             const status = s.pct >= 80 ? 'strong' : s.pct >= 60 ? 'moderate' : 'weak';
             return (
               <div key={s.skill} className="flex items-center gap-3 bg-white border border-slate-200 rounded-xl p-3">
@@ -639,10 +912,10 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
           })}
         </div>
 
-        {weak.length > 0 && (
+        {(profile?.weakTopics?.length || weak.length > 0) && (
           <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
             <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-2">Focus Areas</p>
-            <p className="text-sm text-red-800">{weak.map(s => s.skill).join(' · ')}</p>
+            <p className="text-sm text-red-800">{(profile?.weakTopics?.length ? profile.weakTopics : weak.map(s => s.skill)).join(' · ')}</p>
           </div>
         )}
 
@@ -650,7 +923,9 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
           onClick={() => setScreen('roadmap')}
           className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all text-sm flex items-center justify-center gap-2"
         >
-          <ArrowRight className="w-5 h-5" /> View My Personalized Roadmap
+          {roadmapLoading
+            ? <><Sparkles className="w-5 h-5 animate-pulse" /> AI is building your roadmap...</>
+            : <><ArrowRight className="w-5 h-5" /> View My Personalized Roadmap</>}
         </button>
       </div>
     );
@@ -658,14 +933,16 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
 
   // ── ROADMAP ───────────────────────────────────────────────────────────────
   if (screen === 'roadmap') {
-    const overall = skillScores.length > 0
+    const overall = profile?.overallScore ?? (skillScores.length > 0
       ? Math.round(skillScores.reduce((a, s) => a + s.pct, 0) / skillScores.length)
-      : 0;
-    const weakSkills = skillScores.filter(s => s.pct < 60).map(s => s.skill);
-    const completedCount = completedMilestones.size;
+      : 0);
+    const weakSkills: string[] = profile?.weakTopics?.length
+      ? profile.weakTopics
+      : skillScores.filter(s => s.pct < 60).map(s => s.skill);
 
     return (
       <div className="max-w-2xl mx-auto space-y-5 py-4 px-2">
+        {ToastEl}
         {/* Header Card */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 to-purple-700 p-5 sm:p-6 text-white shadow-xl">
           <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/5" />
@@ -701,6 +978,14 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
           </div>
         </div>
 
+        {/* AI roadmap loading */}
+        {roadmapLoading && (
+          <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-sm text-indigo-700 font-semibold">
+            <Sparkles className="w-5 h-5 animate-pulse flex-shrink-0" />
+            Your AI teacher is personalizing your roadmap...
+          </div>
+        )}
+
         {/* Milestones */}
         <div>
           <h2 className="text-base font-bold text-slate-800 mb-4">Learning Journey</h2>
@@ -709,7 +994,7 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
             <div className="absolute left-6 top-8 bottom-8 w-0.5 bg-gradient-to-b from-indigo-300 via-purple-200 to-slate-100" />
             <div className="space-y-4">
               {roadmap.map((milestone, idx) => {
-                const Icon = milestone.icon || Trophy;
+                const Icon = milestoneIcon(milestone);
                 const isCompleted = completedMilestones.has(milestone.id);
                 const prevDone = idx === 0 || completedMilestones.has(roadmap[idx - 1].id);
                 const isCurrent = !isCompleted && prevDone;
@@ -743,6 +1028,9 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
                             isCompleted ? 'text-emerald-800' : isCurrent ? 'text-indigo-900' : 'text-slate-500'
                           )}>{milestone.title}</p>
                           <p className="text-xs text-slate-500 mt-1 leading-relaxed">{milestone.desc}</p>
+                          {isCurrent && milestone.reason && (
+                            <p className="text-[11px] text-indigo-500 mt-1 leading-relaxed">✨ {milestone.reason}</p>
+                          )}
                         </div>
                         {isCompleted && (
                           <span className="text-xs font-bold text-emerald-600 bg-emerald-100 px-2.5 py-1 rounded-full flex-shrink-0">Done ✓</span>
@@ -760,7 +1048,7 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
                             ))}
                           </div>
                           <button
-                            onClick={() => { setActiveMilestone(milestone); setActiveActivityIdx(0); setScreen('milestone'); }}
+                            onClick={() => openMilestone(milestone)}
                             className={cn(
                               "mt-3 flex items-center gap-1.5 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm bg-gradient-to-r",
                               milestone.color
@@ -829,8 +1117,8 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
             <div class="header-card">
               <div>
                 <p style="font-size:11px;opacity:0.8;text-transform:uppercase;letter-spacing:1px">Placement Readiness</p>
-                <p style="font-size:32px;font-weight:900;margin:4px 0">${skillScores.length > 0 ? Math.round(skillScores.reduce((a, s) => a + s.pct, 0) / skillScores.length) : 0}%</p>
-                <p style="font-size:11px;opacity:0.75">${skillScores.filter(s => s.pct < 60).map(s => s.skill).slice(0, 3).join(' · ') || 'All skills strong!'}</p>
+                <p style="font-size:32px;font-weight:900;margin:4px 0">${overall}%</p>
+                <p style="font-size:11px;opacity:0.75">${weakSkills.slice(0, 3).join(' · ') || 'All skills strong!'}</p>
               </div>
               <div class="stats">
                 <div class="stat"><div class="stat-val">${xp}</div><div class="stat-label">XP</div></div>
@@ -842,7 +1130,6 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
               const isCompleted = completedMilestones.has(m.id);
               const prevDone = idx === 0 || completedMilestones.has(roadmap[idx - 1].id);
               const isCurrent = !isCompleted && prevDone;
-              const isLocked = !isCompleted && !prevDone;
               return `<div class="milestone ${isCompleted ? 'done' : isCurrent ? 'current' : 'locked'}">
                 <div style="flex-shrink:0">
                   <div style="width:36px;height:36px;border-radius:10px;background:${isCompleted ? '#22c55e' : isCurrent ? '#6366f1' : '#94a3b8'};display:flex;align-items:center;justify-content:center;color:white;font-weight:900;font-size:14px">${idx + 1}</div>
@@ -874,7 +1161,7 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
           📄 Export Roadmap as PDF
         </button>
         <button
-          onClick={() => { setScreen('diagnostic'); setDiagSkillIdx(0); setDiagQIdx(0); setDiagAnswers({}); }}
+          onClick={startDiagnostic}
           className="w-full border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold py-3 rounded-2xl transition-all flex items-center justify-center gap-2"
         >
           <RotateCcw className="w-4 h-4" /> Retake Diagnostic Assessment
@@ -883,14 +1170,15 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
     );
   }
 
-  // ── MILESTONE DETAIL ──────────────────────────────────────────────────────
+  // ── MILESTONE DETAIL (dynamic lesson + tutor + resources) ─────────────────
   if (screen === 'milestone' && activeMilestone) {
-    const Icon = activeMilestone.icon || Trophy;
+    const Icon = milestoneIcon(activeMilestone);
     const activities = activeMilestone.activities;
     const isLast = activeActivityIdx === activities.length - 1;
 
     return (
       <div className="max-w-xl mx-auto space-y-6 py-4 px-2">
+        {ToastEl}
         {/* Header */}
         <div className="flex items-center gap-3">
           <button onClick={() => setScreen('roadmap')} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500">
@@ -934,18 +1222,23 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
             </div>
           </div>
 
-          <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-            <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">How to complete:</p>
-            <p className="text-sm text-indigo-900 leading-relaxed">
-              {activities[activeActivityIdx].includes('AI') || activities[activeActivityIdx].includes('Session')
-                ? '🤖 Visit AI Conversation Practice to complete this activity with your AI tutor.'
-                : activities[activeActivityIdx].includes('Quiz') || activities[activeActivityIdx].includes('Test')
-                  ? '📝 Complete the quiz in your My Assessments section to mark this done.'
-                  : activities[activeActivityIdx].includes('Reading') || activities[activeActivityIdx].includes('Listening')
-                    ? '🎧 Practice using the resources assigned by your teacher or the AI Conversation module.'
-                    : `✍️ Practice "${activities[activeActivityIdx]}" with your teacher or through the AI Practice module.`}
-            </p>
-          </div>
+          {/* AI-generated lesson */}
+          {lessonLoading ? (
+            <div className="bg-indigo-50 rounded-xl p-4 flex items-center gap-3 text-sm text-indigo-700 font-semibold">
+              <Sparkles className="w-5 h-5 animate-pulse flex-shrink-0" />
+              Your AI teacher is writing today's lesson just for you...
+            </div>
+          ) : lessonContent ? (
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 max-h-[28rem] overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: mdToHtml(lessonContent) }} />
+          ) : (
+            <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+              <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider mb-1">How to complete:</p>
+              <p className="text-sm text-indigo-900 leading-relaxed">
+                ✍️ Practice "{activities[activeActivityIdx]}" with your AI teacher.
+              </p>
+            </div>
+          )}
 
           {/* All activities list */}
           <div className="space-y-1.5">
@@ -964,29 +1257,272 @@ Keep it concise, educational, and motivating. Use markdown formatting with ## fo
           </div>
         </div>
 
+        {/* AI Tutor */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            <MessageSquare className="w-4 h-4 text-indigo-500" /> Ask your AI Tutor
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {['Why?', 'Explain again', 'Another example', 'Explain simpler', 'Show analogy', 'Give a hint'].map(qk => (
+              <button key={qk} onClick={() => askTutor(qk)}
+                disabled={tutorLoading || lessonLoading}
+                className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-full font-medium hover:bg-indigo-100 transition-all disabled:opacity-50">
+                {qk}
+              </button>
+            ))}
+          </div>
+          {tutorMessages.length > 0 && (
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {tutorMessages.map((m, i) => (
+                <div key={i} className={cn('text-xs p-3 rounded-xl leading-relaxed',
+                  m.role === 'user' ? 'bg-indigo-600 text-white ml-8' : 'bg-slate-50 border border-slate-100 text-slate-700 mr-4'
+                )}>
+                  {m.role === 'assistant'
+                    ? <div dangerouslySetInnerHTML={{ __html: mdToHtml(m.content) }} />
+                    : m.content}
+                </div>
+              ))}
+              {tutorLoading && (
+                <div className="bg-slate-50 border border-slate-100 text-slate-400 text-xs p-3 rounded-xl mr-4 animate-pulse">
+                  Teacher is typing...
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2">
+            <input
+              value={tutorInput}
+              onChange={e => setTutorInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') askTutor(tutorInput); }}
+              placeholder="Ask anything about this lesson..."
+              className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-indigo-400"
+            />
+            <button onClick={() => askTutor(tutorInput)}
+              disabled={tutorLoading || !tutorInput.trim()}
+              className="bg-indigo-600 text-white p-2 rounded-xl disabled:opacity-40 hover:bg-indigo-700 transition-all">
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Recommended Resources (Agent 5) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+          <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            <Youtube className="w-4 h-4 text-red-500" /> Recommended Resources
+          </h3>
+          {enrichmentLoading ? (
+            <p className="text-xs text-slate-400 animate-pulse">Finding the best videos and resources for this lesson...</p>
+          ) : enrichment ? (
+            <>
+              <div className="space-y-2">
+                {(enrichment.videos || []).map((v: any, i: number) => (
+                  <a key={i}
+                    href={`https://www.youtube.com/results?search_query=${encodeURIComponent(v.searchQuery || `${v.title} ${v.channel}`)}`}
+                    target="_blank" rel="noreferrer"
+                    className="block bg-slate-50 border border-slate-100 rounded-xl p-3 hover:border-red-200 hover:bg-red-50/40 transition-all">
+                    <div className="flex items-start gap-2">
+                      <Youtube className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800">{v.title}</p>
+                        <p className="text-[11px] text-slate-500">{v.channel}{v.duration ? ` · ${v.duration}` : ''}</p>
+                        {v.description && <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{v.description}</p>}
+                        {v.reason && <p className="text-[11px] text-indigo-600 mt-1">✨ {v.reason}</p>}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+              {(enrichment.resources || []).length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(enrichment.resources || []).map((r: any, i: number) => (
+                    <div key={i} className="bg-slate-50 border border-slate-100 rounded-xl p-3">
+                      <p className="text-[10px] font-bold text-indigo-500 uppercase tracking-wider">{r.type}</p>
+                      <p className="text-xs font-bold text-slate-800 mt-0.5">{r.title}</p>
+                      {r.description && <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{r.description}</p>}
+                      {r.source && <p className="text-[10px] text-slate-400 mt-1">{r.source}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-slate-400">Resources will appear here once the lesson loads.</p>
+          )}
+        </div>
+
+        {/* Revision (Agent 9) */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-500" /> Quick Revision
+            </h3>
+            <button onClick={generateRevision} disabled={revisionLoading}
+              className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full hover:bg-emerald-100 transition-all disabled:opacity-50">
+              {revisionLoading ? 'Generating...' : revisionContent ? 'Regenerate' : 'Generate revision sheet'}
+            </button>
+          </div>
+          {revisionContent && (
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 max-h-80 overflow-y-auto"
+              dangerouslySetInnerHTML={{ __html: mdToHtml(revisionContent) }} />
+          )}
+        </div>
+
         {/* Buttons */}
         <div className="flex gap-3">
           {activeActivityIdx > 0 && (
-            <button onClick={() => setActiveActivityIdx(i => i - 1)}
+            <button onClick={() => changeActivity(activeMilestone, activeActivityIdx - 1)}
               className="flex-1 border border-slate-200 text-slate-600 font-semibold py-3 rounded-2xl hover:bg-slate-50 transition-all text-sm">
               Previous
             </button>
           )}
           {!isLast ? (
-            <button onClick={() => setActiveActivityIdx(i => i + 1)}
+            <button onClick={() => changeActivity(activeMilestone, activeActivityIdx + 1)}
               className={cn("flex-1 text-white font-bold py-3 rounded-2xl shadow-sm transition-all text-sm bg-gradient-to-r", activeMilestone.color)}>
               Next Activity →
             </button>
           ) : (
             <button
-              onClick={async () => {
-                await handleCompleteMilestone(activeMilestone);
-              }}
-              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-sm transition-all text-sm flex items-center justify-center gap-2 active:scale-95"
+              onClick={startTest}
+              disabled={testLoading}
+              className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-2xl shadow-sm transition-all text-sm flex items-center justify-center gap-2 active:scale-95 disabled:opacity-60"
             >
-              <Trophy className="w-4 h-4" /> Complete Milestone +150 XP
+              {testLoading
+                ? <><Sparkles className="w-4 h-4 animate-pulse" /> Preparing your test...</>
+                : <><Trophy className="w-4 h-4" /> Take Mastery Test</>}
             </button>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  // ── MASTERY TEST (Agent 6) ────────────────────────────────────────────────
+  if (screen === 'test' && activeMilestone && testQuestions.length > 0) {
+    const q = testQuestions[testIdx];
+    const progress = Math.round((testIdx / testQuestions.length) * 100);
+
+    return (
+      <div className="max-w-xl mx-auto space-y-6 py-4 px-2">
+        {/* Progress */}
+        <div className="flex items-center gap-3">
+          <button onClick={() => setScreen('milestone')} className="text-slate-400 hover:text-slate-700 p-1">
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1">
+            <div className="flex justify-between text-xs text-slate-500 mb-1">
+              <span>{activeMilestone.title} · Mastery Test</span>
+              <span>{testIdx + 1}/{testQuestions.length}</span>
+            </div>
+            <div className="w-full bg-slate-100 rounded-full h-2">
+              <div className="bg-emerald-500 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        </div>
+
+        {/* Badge */}
+        <div className={cn("flex items-center gap-3 p-4 rounded-2xl text-white bg-gradient-to-r", activeMilestone.color)}>
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+            <Target className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest">
+              {q.difficulty ? `${q.difficulty} · ` : ''}{q.type || 'knowledge'}
+            </p>
+            <p className="font-black text-base">Mastery Test</p>
+          </div>
+        </div>
+
+        {/* Question */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Question {testIdx + 1} of {testQuestions.length}</p>
+          <p className="text-slate-900 font-semibold text-base leading-snug">{q.question}</p>
+        </div>
+
+        {/* Options */}
+        <div className="grid grid-cols-1 gap-3">
+          {q.options.map(opt => (
+            <button
+              key={opt}
+              onClick={() => handleTestAnswer(opt)}
+              className="w-full text-left p-4 rounded-2xl border-2 border-slate-200 bg-white hover:border-emerald-400 hover:bg-emerald-50 transition-all font-semibold text-slate-800 text-sm active:scale-[0.98]"
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // ── TEST RESULT (Agents 7 & 8) ────────────────────────────────────────────
+  if (screen === 'testResult' && activeMilestone) {
+    if (evalLoading || !evaluation) {
+      return (
+        <div className="max-w-xl mx-auto py-16 px-2 text-center space-y-4">
+          {ToastEl}
+          <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-3xl flex items-center justify-center mx-auto shadow-xl animate-pulse">
+            <BrainCircuit className="w-8 h-8 text-white" />
+          </div>
+          <h2 className="text-lg font-black text-slate-900">Evaluating your understanding...</h2>
+          <p className="text-sm text-slate-500">Your AI teacher is analyzing not just your score, but how you learned.</p>
+        </div>
+      );
+    }
+
+    const passed = !!evaluation.masteryAchieved;
+    return (
+      <div className="max-w-xl mx-auto space-y-6 py-4 px-2">
+        {ToastEl}
+        <div className="text-center space-y-2">
+          <div className={cn('text-5xl font-black', passed ? 'text-emerald-600' : 'text-amber-600')}>{evaluation.score}%</div>
+          <h2 className="text-xl font-black text-slate-900">
+            {passed ? `Milestone "${activeMilestone.title}" Mastered! 🏆` : 'Almost there — mastery not yet reached'}
+          </h2>
+          <p className="text-slate-500 text-sm">{evaluation.feedback}</p>
+          {passed && <p className="text-emerald-600 font-bold text-sm">+150 XP earned!</p>}
+        </div>
+
+        {/* Analysis cards */}
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: 'Performance', value: evaluation.performance },
+            { label: 'Retention', value: evaluation.retention || '—' },
+            { label: 'Confidence', value: evaluation.confidence !== undefined ? `${evaluation.confidence}%` : '—' },
+            { label: 'Guessing detected', value: evaluation.guessingDetected ? 'Yes' : 'No' },
+          ].map(c => (
+            <div key={c.label} className="bg-white border border-slate-200 rounded-xl p-3 text-center">
+              <p className="text-sm font-black text-slate-800 capitalize">{String(c.value)}</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{c.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {(evaluation.weakConcepts || []).length > 0 && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-4">
+            <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-2">Still needs work</p>
+            <p className="text-sm text-red-800">{evaluation.weakConcepts.join(' · ')}</p>
+          </div>
+        )}
+        {(evaluation.strongConcepts || []).length > 0 && (
+          <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider mb-2">Mastered concepts</p>
+            <p className="text-sm text-emerald-800">{evaluation.strongConcepts.join(' · ')}</p>
+          </div>
+        )}
+
+        <div className="flex gap-3">
+          {!passed && (
+            <button
+              onClick={() => { setScreen('milestone'); generateLesson(activeMilestone.activities[0], activeMilestone); setActiveActivityIdx(0); }}
+              className="flex-1 border border-slate-200 text-slate-600 font-semibold py-3 rounded-2xl hover:bg-slate-50 transition-all text-sm flex items-center justify-center gap-2">
+              <RotateCcw className="w-4 h-4" /> Review lesson & retry
+            </button>
+          )}
+          <button
+            onClick={() => { setActiveMilestone(null); setLessonContent(null); setEvaluation(null); setScreen('roadmap'); }}
+            className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-2xl shadow-sm transition-all text-sm flex items-center justify-center gap-2">
+            <ArrowRight className="w-4 h-4" /> Back to Roadmap
+          </button>
         </div>
       </div>
     );

@@ -343,10 +343,10 @@ export default function Assessments() {
     setQuizAnswers({});
     setQuizSubmitted(false);
     setQuizScore(null);
-    // Show info overlay for 3 seconds then auto-hide
+    // Show info overlay for 5 seconds then auto-hide
     setShowInfoOverlay(true);
     if (overlayTimerRef.current) clearTimeout(overlayTimerRef.current);
-    overlayTimerRef.current = setTimeout(() => setShowInfoOverlay(false), 3000);
+    overlayTimerRef.current = setTimeout(() => setShowInfoOverlay(false), 5000);
 
     // Realtime Activity updates
     const studentId = auth.currentUser?.uid;
@@ -407,7 +407,7 @@ export default function Assessments() {
   if (loading) return <div className="p-8 text-center text-slate-500">Loading...</div>;
 
   if (role === 'student') {
-    // Group assignments by course → then by unit (sessionName)
+    // Group assignments by course  then by unit (sessionName)
     const byCourse: Record<string, Record<string, any[]>> = {};
     myAssignments.forEach(a => {
       const course = a.courseTitle || 'Uncategorized';
@@ -601,9 +601,9 @@ export default function Assessments() {
 
         {/* RIGHT PANEL - Lesson Player */}
         {activeLesson ? (
-          <div className="flex-1 flex flex-col overflow-hidden" style={{ background: '#0d1117' }}>
+          <div className="flex-1 flex flex-col overflow-hidden bg-slate-50">
             {/* Top bar */}
-            <div className="flex items-center justify-between px-5 py-2.5 bg-[#161b22] border-b border-[#30363d] flex-shrink-0">
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shadow-sm flex-shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <button
                   onClick={() => {
@@ -615,15 +615,15 @@ export default function Assessments() {
                       set(ref(database, 'users/' + studentId + '/currentActivity'), null);
                     }
                   }}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-all"
+                  className="w-9 h-9 flex items-center justify-center rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-all"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                   </svg>
                 </button>
                 <div className="min-w-0">
-                  <p className="text-white font-bold text-sm truncate">{activeLesson.name}</p>
-                  <p className="text-slate-500 text-xs truncate">{activeLesson.courseTitle} · {activeLesson.sessionName}</p>
+                  <p className="text-slate-900 font-bold text-lg truncate">{activeLesson.name}</p>
+                  <p className="text-slate-600 text-sm truncate">{activeLesson.courseTitle}  {activeLesson.sessionName}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
@@ -640,46 +640,274 @@ export default function Assessments() {
             </div>
 
             {!quizMode ? (
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[#0d1117]">
-                {/* VIDEO / CONTENT AREA — stacked configuration, no overlap */}
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
-                  {activeLesson.resourceUrl && (
-                    <div className="h-64 sm:h-80 md:h-[400px] w-full bg-black flex-shrink-0 relative flex items-center justify-center">
-                      {renderMedia(activeLesson.resourceUrl, activeLesson.type)}
+              <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-50">
+                {/* VIDEO / CONTENT AREA " stacked configuration, no overlap */}
+                <div className="flex-1 flex flex-col min-h-0 overflow-y-auto">
+                  {/* === LESSON CONTENT SECTIONS - REORDERED === */}
+
+                  {/* Multi-resource rendering (new format) */}
+                  {activeLesson.resources && Array.isArray(activeLesson.resources) && activeLesson.resources.length > 0 ? (
+                    activeLesson.resources.map((res, idx) => {
+                      if (!res.url) return null;
+                      
+                      if (res.type === 'Video') {
+                        return (
+                          <div key={idx} className="w-full bg-white border-b border-slate-200 px-6 py-4 lg:py-6">
+                            <div className="max-w-6xl mx-auto">
+                              <div className="flex items-center gap-4 mb-4">
+                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-primary-100 flex items-center justify-center">
+                                  <Video className="w-6 h-6 lg:w-7 lg:h-7 text-primary-600" strokeWidth={2.5} />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-1">Video Content</p>
+                                  <p className="text-slate-900 font-bold text-lg lg:text-xl">{res.fileName || activeLesson.name}</p>
+                                </div>
+                              </div>
+                              <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg ring-1 ring-slate-200">
+                                {renderMedia(res.url, 'Video')}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (res.type === 'PDF' || res.type === 'Document' || res.fileName?.match(/\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i)) {
+                        return (
+                          <div key={idx} className="w-full bg-blue-50 border-b border-blue-100 px-6 py-10 lg:px-12">
+                            <div className="max-w-6xl mx-auto">
+                              <div className="flex items-center gap-4 mb-6">
+                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-blue-100 flex items-center justify-center">
+                                  <FileText className="w-6 h-6 lg:w-7 lg:h-7 text-blue-700" strokeWidth={2.5} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1">Documents & Materials</p>
+                                  <p className="text-slate-900 font-bold text-lg lg:text-xl truncate">{res.fileName || 'Lesson Materials'}</p>
+                                </div>
+                                <a 
+                                  href={res.url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                                >
+                                  Open Document
+                                </a>
+                              </div>
+                              {res.url.toLowerCase().endsWith('.pdf') && (
+                                <div className="w-full h-[600px] bg-white rounded-xl overflow-hidden shadow-lg border border-blue-200">
+                                  <iframe 
+                                    src={`${res.url}#toolbar=1&navpanes=1&scrollbar=1`}
+                                    className="w-full h-full"
+                                    title="PDF Viewer"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (res.type === 'Image' || res.fileName?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+                        return (
+                          <div key={idx} className="w-full bg-green-50 border-b border-green-100 px-6 py-10 lg:px-12">
+                            <div className="max-w-6xl mx-auto">
+                              <div className="flex items-center gap-4 mb-6">
+                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-green-100 flex items-center justify-center">
+                                  <svg className="w-6 h-6 lg:w-7 lg:h-7 text-green-700" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-1">Visual Content</p>
+                                  <p className="text-slate-900 font-bold text-xl">{res.fileName || 'Image Resources'}</p>
+                                </div>
+                              </div>
+                              <div className="bg-white rounded-xl overflow-hidden shadow-lg border border-green-200 p-4">
+                                <img 
+                                  src={res.url} 
+                                  alt={res.fileName || activeLesson.name}
+                                  className="max-w-full h-auto rounded-lg mx-auto"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      if (res.type === 'Audio' || res.fileName?.match(/\.(mp3|wav|ogg|m4a|aac)$/i)) {
+                        return (
+                          <div key={idx} className="w-full bg-purple-50 border-b border-purple-100 px-6 py-10 lg:px-12">
+                            <div className="max-w-6xl mx-auto">
+                              <div className="flex items-center gap-4 mb-6">
+                                <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-purple-100 flex items-center justify-center">
+                                  <svg className="w-6 h-6 lg:w-7 lg:h-7 text-purple-700" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                  </svg>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-1">Audio Content</p>
+                                  <p className="text-slate-900 font-bold text-xl">{res.fileName || 'Audio Lesson'}</p>
+                                </div>
+                              </div>
+                              <div className="bg-white rounded-xl p-6 shadow-lg border border-purple-200">
+                                <audio src={res.url} controls className="w-full" style={{height: '54px'}} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })
+                  ) : (
+                    <>
+                      {/* Legacy Single Resource rendering (backward compat) */}
+                      {activeLesson.resourceUrl && activeLesson.type === 'Video' && (
+                        <div className="w-full bg-white border-b border-slate-200 px-6 py-4 lg:py-6">
+                          <div className="max-w-6xl mx-auto">
+                            <div className="flex items-center gap-4 mb-4">
+                              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-primary-100 flex items-center justify-center">
+                                <Video className="w-6 h-6 lg:w-7 lg:h-7 text-primary-600" strokeWidth={2.5} />
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-primary-600 uppercase tracking-wider mb-1">Video Content</p>
+                                <p className="text-slate-900 font-bold text-lg lg:text-xl">{activeLesson.name}</p>
+                              </div>
+                            </div>
+                            <div className="w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg ring-1 ring-slate-200">
+                              {renderMedia(activeLesson.resourceUrl, activeLesson.type)}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeLesson.resourceUrl && (activeLesson.type === 'PDF' || activeLesson.type === 'Document' || activeLesson.fileName?.match(/\.(pdf|doc|docx|ppt|pptx|xls|xlsx)$/i)) && (
+                        <div className="w-full bg-blue-50 border-b border-blue-100 px-6 py-10 lg:px-12">
+                          <div className="max-w-6xl mx-auto">
+                            <div className="flex items-center gap-4 mb-6">
+                              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-blue-100 flex items-center justify-center">
+                                <FileText className="w-6 h-6 lg:w-7 lg:h-7 text-blue-700" strokeWidth={2.5} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider mb-1">Documents & Materials</p>
+                                <p className="text-slate-900 font-bold text-lg lg:text-xl truncate">{activeLesson.fileName || 'Lesson Materials'}</p>
+                              </div>
+                              <a 
+                                href={activeLesson.resourceUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+                              >
+                                Open Document
+                              </a>
+                            </div>
+                            {activeLesson.resourceUrl.toLowerCase().endsWith('.pdf') && (
+                              <div className="w-full h-[600px] bg-white rounded-xl overflow-hidden shadow-lg border border-blue-200">
+                                <iframe 
+                                  src={`${activeLesson.resourceUrl}#toolbar=1&navpanes=1&scrollbar=1`}
+                                  className="w-full h-full"
+                                  title="PDF Viewer"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {activeLesson.resourceUrl && (activeLesson.type === 'Image' || activeLesson.fileName?.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) && (
+                        <div className="w-full bg-green-50 border-b border-green-100 px-6 py-10 lg:px-12">
+                          <div className="max-w-6xl mx-auto">
+                            <div className="flex items-center gap-4 mb-6">
+                              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-green-100 flex items-center justify-center">
+                                <svg className="w-6 h-6 lg:w-7 lg:h-7 text-green-700" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-green-700 uppercase tracking-wider mb-1">Visual Content</p>
+                                <p className="text-slate-900 font-bold text-xl">{activeLesson.fileName || 'Image Resources'}</p>
+                              </div>
+                            </div>
+                            <div className="bg-white rounded-xl overflow-hidden shadow-lg border border-green-200 p-4">
+                              <img 
+                                src={activeLesson.resourceUrl} 
+                                alt={activeLesson.name}
+                                className="max-w-full h-auto rounded-lg mx-auto"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {activeLesson.resourceUrl && activeLesson.type === 'Audio' && (
+                        <div className="w-full bg-purple-50 border-b border-purple-100 px-6 py-10 lg:px-12">
+                          <div className="max-w-6xl mx-auto">
+                            <div className="flex items-center gap-4 mb-6">
+                              <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-purple-100 flex items-center justify-center">
+                                <svg className="w-6 h-6 lg:w-7 lg:h-7 text-purple-700" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                </svg>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-purple-700 uppercase tracking-wider mb-1">Audio Content</p>
+                                <p className="text-slate-900 font-bold text-xl">{activeLesson.fileName || 'Audio Lesson'}</p>
+                              </div>
+                            </div>
+                            <div className="bg-white rounded-xl p-6 shadow-lg border border-purple-200">
+                              <audio src={activeLesson.resourceUrl} controls className="w-full" style={{height: '54px'}} />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* HTML/Text Content Section - only visible if has content */}
+                  {activeLesson.content && (
+                    <div className="w-full bg-amber-50 border-b border-amber-100 px-6 py-10 lg:px-12">
+                      <div className="max-w-6xl mx-auto">
+                        <div className="flex items-center gap-4 mb-6">
+                          <div className="w-12 h-12 lg:w-14 lg:h-14 rounded-xl bg-amber-100 flex items-center justify-center">
+                            <FileText className="w-6 h-6 lg:w-7 lg:h-7 text-amber-700" strokeWidth={2.5} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-1">Text & Instructions</p>
+                            <p className="text-slate-900 font-bold text-lg lg:text-xl">Written Content</p>
+                          </div>
+                        </div>
+                        <div className="bg-white rounded-xl p-8 shadow-sm border border-amber-200">
+                          <div className="prose prose-slate prose-lg max-w-none">
+                            <div 
+                              className="text-slate-800 text-base md:text-lg leading-relaxed whitespace-pre-wrap select-text" 
+                              dangerouslySetInnerHTML={{ __html: activeLesson.content }} 
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )}
-                  {activeLesson.content ? (
-                    <div className="flex-1 overflow-y-auto border-t border-[#30363d] bg-[#0d1117]">
-                      <div className="max-w-2xl mx-auto p-8 text-slate-100 text-lg md:text-xl font-medium leading-relaxed whitespace-pre-wrap select-text" dangerouslySetInnerHTML={{ __html: activeLesson.content }} />
-                    </div>
-                  ) : !activeLesson.resourceUrl ? (
-                    <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">No content available.</div>
-                  ) : null}
 
-                  {/* Info Overlay */}
-                  <div className={cn(
-                    'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/95 via-black/40 to-transparent flex flex-col justify-end p-6 transition-all duration-500 pointer-events-none z-10',
-                    showInfoOverlay ? 'opacity-100' : 'opacity-0'
-                  )}>
-                    <span className="text-xs text-amber-400 font-bold uppercase tracking-widest mb-1">{activeLesson.type}</span>
-                    <h2 className="text-white text-xl font-black">{activeLesson.name}</h2>
-                    <p className="text-slate-400 text-sm">{activeLesson.courseTitle} · {activeLesson.sessionName}</p>
-                  </div>
+                  {/* Empty state fallback */}
+                  {!activeLesson.content && !activeLesson.resourceUrl && (!activeLesson.resources || activeLesson.resources.length === 0) && (
+                    <div className="w-full py-20 px-6 text-center text-slate-400">
+                      <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                      <p>No learning resources or instructions are added to this lesson yet.</p>
+                    </div>
+                  )}
                 </div>
 
-                {/* POST-COMPLETION BANNER — always below the video, never overlapping */}
+                {/* POST-COMPLETION BANNER - always below the video, never overlapping */}
                 {activeLesson.status === 'Completed' && (
-                  <div className="flex-shrink-0 bg-[#161b22] border-t border-[#30363d] px-5 py-3 flex items-center justify-between gap-4">
+                  <div className="flex-shrink-0 bg-green-50 border-t border-green-200 px-5 py-3 flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center flex-shrink-0">
+                      <div className="w-8 h-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center flex-shrink-0">
                         <CheckCircle className="w-4 h-4" />
                       </div>
                       <div>
-                        <p className="text-white text-sm font-bold">Lesson Completed!</p>
-                        <p className="text-slate-500 text-xs">
+                        <p className="text-slate-900 text-sm font-bold">Lesson Completed!</p>
+                        <p className="text-slate-600 text-xs">
                           {activeLesson.testScore !== undefined
                             ? `Quiz score: ${activeLesson.testScore}%`
-                            : activeLesson.test ? 'A quiz is available — take it below.' : 'No quiz for this lesson.'}
+                            : activeLesson.test ? 'A quiz is available - take it below.' : 'No quiz for this lesson.'}
                         </p>
                       </div>
                     </div>
@@ -690,7 +918,7 @@ export default function Assessments() {
                       </Button>
                     )}
                     {activeLesson.test && activeLesson.testScore !== undefined && (
-                      <span className="text-xs font-bold text-slate-400 border border-slate-750 bg-slate-800/40 px-3.5 py-1.5 rounded-lg shadow-sm">
+                      <span className="text-xs font-bold text-slate-600 border border-slate-300 bg-white px-3.5 py-1.5 rounded-lg shadow-sm">
                         Quiz Completed
                       </span>
                     )}
@@ -704,14 +932,14 @@ export default function Assessments() {
                   {!quizSubmitted ? (
                     <>
                       <div className="mb-6">
-                        <p className="text-xs text-amber-400 uppercase tracking-wider font-bold">Quiz</p>
-                        <h2 className="text-white text-2xl font-bold mt-1">{activeLesson.test.title || 'Assessment'}</h2>
-                        <p className="text-slate-400 text-sm mt-1">{activeLesson.test.questions?.length} questions · Answer all to submit</p>
+                        <p className="text-xs text-amber-600 uppercase tracking-wider font-bold">Quiz</p>
+                        <h2 className="text-slate-900 text-2xl font-bold mt-1">{activeLesson.test.title || 'Assessment'}</h2>
+                        <p className="text-slate-600 text-sm mt-1">{activeLesson.test.questions?.length} questions  Answer all to submit</p>
                       </div>
                       <div className="space-y-6">
                         {(activeLesson.test.questions || []).map((q: any, idx: number) => (
-                          <div key={idx} className="bg-[#1e293b] rounded-xl p-6 border border-slate-700">
-                            <p className="text-white font-semibold text-sm mb-4"><span className="text-amber-400 mr-2">{idx + 1}.</span>{q.q}</p>
+                          <div key={idx} className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm">
+                            <p className="text-slate-900 font-semibold text-sm mb-4"><span className="text-amber-400 mr-2">{idx + 1}.</span>{q.q}</p>
                             <div className="grid grid-cols-1 gap-2">
                               {(['a', 'b', 'c', 'd'] as const).map(opt => (
                                 q[opt] && (
@@ -721,9 +949,9 @@ export default function Assessments() {
                                       "text-left px-4 py-3 rounded-lg text-sm border transition-all",
                                       quizAnswers[idx] === opt
                                         ? "bg-primary-600 border-primary-400 text-white font-semibold"
-                                        : "bg-slate-800 border-slate-600 text-slate-300 hover:border-primary-500 hover:text-white"
+                                        : "bg-slate-50 border-slate-300 text-slate-700 hover:border-primary-500 hover:bg-slate-100"
                                     )}>
-                                    <span className="font-bold mr-2 text-slate-400 uppercase">{opt}.</span>{q[opt]}
+                                    <span className="font-bold mr-2 text-slate-500 uppercase">{opt}.</span>{q[opt]}
                                   </button>
                                 )
                               ))}
@@ -732,7 +960,7 @@ export default function Assessments() {
                         ))}
                       </div>
                       <div className="mt-8 flex gap-3">
-                        <Button onClick={() => setQuizMode(false)} variant="outline" className="text-slate-300 border-slate-600 hover:bg-slate-800">Back to Lesson</Button>
+                        <Button onClick={() => setQuizMode(false)} variant="outline" className="text-slate-600 border-slate-300 hover:bg-slate-100">Back to Lesson</Button>
                         <Button onClick={handleSubmitQuiz}
                           disabled={Object.keys(quizAnswers).length < (activeLesson.test.questions?.length || 0)}
                           className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-8">Submit Quiz</Button>
@@ -740,11 +968,11 @@ export default function Assessments() {
                     </>
                   ) : (
                     <div className="text-center py-16">
-                      <div className={cn("text-7xl font-black mb-4", quizScore! >= 70 ? 'text-green-400' : 'text-red-400')}>{quizScore}%</div>
-                      <p className="text-white text-2xl font-bold">{quizScore! >= 70 ? 'Great Job! 🎉' : 'Keep Practicing!'}</p>
-                      <p className="text-slate-400 text-sm mt-2">Your score has been saved.</p>
+                      <div className={cn("text-7xl font-black mb-4", quizScore! >= 70 ? 'text-green-600' : 'text-red-600')}>{quizScore}%</div>
+                      <p className="text-slate-900 text-2xl font-bold">{quizScore! >= 70 ? 'Great Job! ' : 'Keep Practicing!'}</p>
+                      <p className="text-slate-600 text-sm mt-2">Your score has been saved.</p>
                       <div className="mt-8 flex gap-3 justify-center">
-                        <Button onClick={() => setQuizMode(false)} variant="outline" className="text-slate-300 border-slate-600 hover:bg-slate-800">Back to Lesson</Button>
+                        <Button onClick={() => setQuizMode(false)} variant="outline" className="text-slate-600 border-slate-300 hover:bg-slate-100">Back to Lesson</Button>
                         <Button onClick={() => { setActiveLesson(null); setQuizMode(false); }} className="bg-primary-600 hover:bg-primary-700 text-white">Back to My Learning</Button>
                       </div>
                     </div>
@@ -821,7 +1049,7 @@ export default function Assessments() {
             className="text-slate-300 hover:text-white text-lg leading-none flex-shrink-0"
             title="Close preview"
           >
-            ×
+            �
           </button>
         </div>
         {mediaEl ? (
@@ -1011,7 +1239,7 @@ export default function Assessments() {
                             : "border-transparent text-slate-700 hover:bg-slate-50"
                         )}
                       >
-                        <span className="block">{course.className} · {course.semester}</span>
+                        <span className="block">{course.className}  {course.semester}</span>
                         <span className="block text-xs text-slate-400 font-normal">{course.title}</span>
                       </li>
                     ))}
@@ -1155,7 +1383,7 @@ export default function Assessments() {
                   <CardHeader className="bg-slate-50/70 border-b border-slate-200/50 py-3 px-5 flex flex-row items-center justify-between">
                     <div>
                       <h4 className="font-bold text-slate-800 text-sm">{student.name}</h4>
-                      <p className="text-xs text-slate-500">{student.email} · Level: {student.level || 'Not Specified'}</p>
+                      <p className="text-xs text-slate-500">{student.email}  Level: {student.level || 'Not Specified'}</p>
                     </div>
                     <span className="text-xs font-semibold bg-slate-100 px-3 py-1 rounded-full text-slate-600 border border-slate-200">
                       {studentAssignments.length} Assignment{studentAssignments.length !== 1 ? 's' : ''}
@@ -1181,7 +1409,7 @@ export default function Assessments() {
                             {studentAssignments.map((a) => (
                               <TableRow key={a.id} className="hover:bg-slate-50/30 text-xs border-b border-slate-100 last:border-b-0">
                                 <TableCell className="font-bold text-slate-800 pl-6">{a.name}</TableCell>
-                                <TableCell className="text-slate-650">{a.courseTitle} <span className="text-[10px] text-slate-400">· {a.className}</span></TableCell>
+                                <TableCell className="text-slate-650">{a.courseTitle} <span className="text-[10px] text-slate-400"> {a.className}</span></TableCell>
                                 <TableCell className="text-slate-600">{a.sessionName}</TableCell>
                                 <TableCell className="text-center font-medium">
                                   <span className={cn(
@@ -1223,3 +1451,8 @@ export default function Assessments() {
     </div>
   );
 }
+
+
+
+
+
