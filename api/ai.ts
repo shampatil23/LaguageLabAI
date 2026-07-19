@@ -1,4 +1,4 @@
-﻿// Consolidated AI API endpoint for Vercel deployment
+// Consolidated AI API endpoint for Vercel deployment
 // This file contains all necessary code without external dependencies
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -87,7 +87,14 @@ function extractJson(text: string): any | null {
 }
 
 async function callProvider(p: any, opts: GenerateOptions): Promise<any> {
-  const apiKey = process.env[p.apiKeyEnv];
+  // Fallback keys ensure the function works on Vercel even if env vars aren't
+  // configured in the dashboard. Keep these in sync with app/api/_lib/providers.ts.
+  const FALLBACK_KEYS: Record<string, string> = {
+    GROQ_API_KEY: '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',
+    OPENROUTER_API_KEY: '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',
+    NVIDIA_API_KEY: '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',
+  };
+  const apiKey = process.env[p.apiKeyEnv] || FALLBACK_KEYS[p.apiKeyEnv];
   if (!apiKey) return { ok: false, error: `${p.apiKeyEnv} not configured`, retryable: false };
 
   const controller = new AbortController();

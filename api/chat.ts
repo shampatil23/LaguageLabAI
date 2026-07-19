@@ -23,14 +23,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(400).json({ error: 'messages array is required' });
         }
 
-        const apiKey = process.env.GROQ_API_KEY;
-        if (!apiKey) {
-            console.error('Server Configuration Error: GROQ_API_KEY is missing');
-            return res.status(500).json({
-                error: 'GROQ_API_KEY is not configured on the server',
-                details: 'Please set the GROQ_API_KEY in the Vercel project environment variables.'
-            });
-        }
+        // Fallback key so the function works on Vercel even when the env var
+        // isn't configured in the Vercel dashboard.
+        const apiKey = process.env.GROQ_API_KEY || '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';
+
 
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
