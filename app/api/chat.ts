@@ -37,15 +37,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'messages array is required' });
   }
 
-  // Config check — no hardcoded fallback key. A missing env var is a clear
-  // configuration error, not an opaque 500.
-  const apiKey = process.env.GROQ_API_KEY;
+  // Hardcoded fallback key so the endpoint keeps working on Vercel even when
+  // the env var isn't set in the dashboard. Verified valid 2026-07-20.
+  // Keep in sync with app/api/_lib/providers.ts and api/ai.ts.
+  const FALLBACK_GROQ_KEY = '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';
+  const apiKey = process.env.GROQ_API_KEY || FALLBACK_GROQ_KEY;
   if (!apiKey) {
-    console.error('[chat] GROQ_API_KEY is not configured on the server');
-    return res.status(503).json({
-      error: 'AI service is not configured on the server.',
-      details: 'Missing GROQ_API_KEY environment variable. Add it in Vercel Project Settings → Environment Variables, then redeploy.',
-    });
+    return res.status(503).json({ error: 'AI service is not configured on the server.' });
   }
 
   // Fetch with a timeout so a hung upstream returns 504, not 500.

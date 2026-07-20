@@ -335,7 +335,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method Not Allowed' });
 
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
+    // Safe body parsing — Vercel may hand a string or already-parsed object.
+    // A malformed JSON string must not bubble up as a 500.
+    let body: any;
+    if (typeof req.body === 'string') {
+      try { body = JSON.parse(req.body); } catch { body = {}; }
+    } else {
+      body = req.body || {};
+    }
     const agent = typeof body?.agent === 'string' ? body.agent : '';
     
     if (!agent || !AGENTS[agent]) {

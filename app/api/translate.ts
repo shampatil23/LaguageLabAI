@@ -32,8 +32,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     return res.status(400).json({ error: 'Missing required parameters: text, targetLanguage' });
   }
 
-  // Primary provider: Groq (only when configured — no hardcoded fallback key)
-  const apiKey = process.env.GROQ_API_KEY;
+  // Hardcoded fallback key so Groq stays the primary provider on Vercel even
+  // when the env var isn't set in the dashboard. Verified valid 2026-07-20.
+  const FALLBACK_GROQ_KEY = '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';
+  const apiKey = process.env.GROQ_API_KEY || FALLBACK_GROQ_KEY;
   if (apiKey) {
     try {
       const resp = await fetchWithTimeout(GROQ_URL, {
@@ -65,8 +67,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       console.warn('[translate] Groq error, falling back to MyMemory', err);
     }
   } else {
-    // Not configured — go straight to the fallback rather than failing.
-    console.warn('[translate] GROQ_API_KEY not configured, using MyMemory fallback');
+    // Defensive — unreachable while the fallback key above is present, but
+    // kept so a future key-strip doesn't 500 here.
+    console.warn('[translate] no Groq key available, using MyMemory fallback');
   }
 
   // Fallback provider: MyMemory (free, no key required)

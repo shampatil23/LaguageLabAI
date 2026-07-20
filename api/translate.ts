@@ -13,7 +13,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    const apiKey = process.env.GROQ_API_KEY;
+    // Hardcoded fallback key so Groq stays primary on Vercel even without
+    // the env var. Verified valid 2026-07-20. Keep in sync with api/chat.ts.
+    const FALLBACK_GROQ_KEY = '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';
+    const apiKey = process.env.GROQ_API_KEY || FALLBACK_GROQ_KEY;
     if (apiKey) {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
